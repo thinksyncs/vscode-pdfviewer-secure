@@ -1,24 +1,26 @@
-name: Publish Extension Registries on Release
+name: Publish Extension Registries Manually
 
 on:
-  release:
-    types:
-      - published
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag such as v2.0.0
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   publish:
-    name: Publish Extension Packages
+    name: Publish Extension Packages Manually
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
       - name: Resolve release version
         run: |
-          VERSION="${{ github.event.release.tag_name || github.ref_name }}"
+          VERSION="${{ inputs.release_tag }}"
           VERSION="${VERSION#v}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "VSIX_NAME=vscode-pdfviewer-secure-$VERSION.vsix" >> "$GITHUB_ENV"
@@ -49,7 +51,7 @@ jobs:
       - name: Publish release build to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx vsce publish --packagePath "$VSIX_NAME" --pat "$VSCE_PAT"
+        run: npx vsce publish --packagePath "$VSIX_NAME" --pat "$VSCE_PAT" --skip-duplicate
 
       - name: Publish release build to Open VSX
         env:

@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   release:
-    name: Create GitHub Release
+    name: Release Extension
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -49,3 +49,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "$GITHUB_REF_NAME" "$VSIX_NAME" --generate-notes --verify-tag
+
+      - name: Check publish secrets
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          test -n "$VSCE_PAT" || { echo "VSCE_PAT is not set"; exit 1; }
+          test -n "$OVSX_PAT" || { echo "OVSX_PAT is not set"; exit 1; }
+
+      - name: Publish release build to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath "$VSIX_NAME" --pat "$VSCE_PAT" --skip-duplicate
+
+      - name: Publish release build to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish "$VSIX_NAME" -p "$OVSX_PAT"
