@@ -1,4 +1,4 @@
-name: Publish to VS Code Marketplace on Release
+name: Publish Extension Registries on Release
 
 on:
   release:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish Marketplace Extension
+    name: Publish Extension Packages
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -28,10 +28,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Package VSIX
-        run: npx vsce package --out vscode-pdfviewer-secure-${{ github.ref_name }}.vsix
-
-      - name: Publish release build to Marketplace
+      - name: Check publish secrets
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx vsce publish --packagePath vscode-pdfviewer-secure-${{ github.ref_name }}.vsix --pat "$VSCE_PAT"
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          test -n "$VSCE_PAT" || { echo "VSCE_PAT is not set"; exit 1; }
+          test -n "$OVSX_PAT" || { echo "OVSX_PAT is not set"; exit 1; }
+
+      - name: Package VSIX
+        run: npx vsce package --out vscode-pdfviewer-secure-${{ github.event.release.tag_name || github.ref_name }}.vsix
+
+      - name: Publish release build to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath vscode-pdfviewer-secure-${{ github.event.release.tag_name || github.ref_name }}.vsix --pat "$VSCE_PAT"
+
+      - name: Publish release build to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish vscode-pdfviewer-secure-${{ github.event.release.tag_name || github.ref_name }}.vsix -p "$OVSX_PAT"
