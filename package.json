@@ -1,7 +1,7 @@
 {
-  "name": "vscode-pdfviewer",
-  "displayName": "VSCode PDF Viewer",
-  "description": "Offline-first, security-hardened PDF viewer for VS Code.",
+  "name": "vscode-pdfviewer-secure",
+  "displayName": "VSCode PDF Viewer Secure",
+  "description": "Security-first, offline-first PDF viewer for VS Code business environments.",
   "version": "1.2.2",
   "publisher": "akira",
   "engines": {
@@ -17,12 +17,12 @@
   "icon": "image.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/thinksyncs/vscode-pdfviewer.git"
+    "url": "https://github.com/thinksyncs/vscode-pdfviewer-secure.git"
   },
   "bugs": {
-    "url": "https://github.com/thinksyncs/vscode-pdfviewer/issues"
+    "url": "https://github.com/thinksyncs/vscode-pdfviewer-secure/issues"
   },
-  "homepage": "https://github.com/thinksyncs/vscode-pdfviewer",
+  "homepage": "https://github.com/thinksyncs/vscode-pdfviewer-secure",
   "activationEvents": [
     "onCustomEditor:vscode-pdfviewer.preview"
   ],
@@ -36,7 +36,7 @@
     "customEditors": [
       {
         "viewType": "vscode-pdfviewer.preview",
-        "displayName": "VSCode PDF Viewer",
+        "displayName": "VSCode PDF Viewer Secure",
         "selector": [
           {
             "filenamePattern": "*.pdf"

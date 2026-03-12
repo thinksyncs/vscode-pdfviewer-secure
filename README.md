@@ -1,11 +1,12 @@
-# VSCode PDF Viewer
+# VSCode PDF Viewer Secure
 
-Offline-first, security-first PDF viewer for VS Code with reduced telemetry exposure.
+Security-first, offline-first PDF viewer for VS Code business environments with reduced telemetry exposure.
 
 ![screenshot](https://user-images.githubusercontent.com/3643499/84454816-98fcd600-ac96-11ea-822c-3ae1e1599a13.gif)
 
 ## Update
 
+- Business-oriented secure fork: this project is maintained as a hardened fork for organizations that want to use VS Code with a more controlled local PDF preview surface.
 - Offline-first: PDF rendering and bundled viewer assets stay inside the extension, so local documents can be opened without depending on external services.
 - Security first: the viewer runs under a restrictive webview CSP, disables PDF scripting, and keeps external link handling locked down by default.
 - Telemetry less: the extension does not add its own telemetry pipeline and avoids unnecessary network-connected integrations in the preview flow.
@@ -28,6 +29,14 @@ Offline-first, security-first PDF viewer for VS Code with reduced telemetry expo
 - `pdf-preview.features.annotationEditing`
 
 All feature flags default to `false`. Enable only what your workspace actually needs.
+
+## Disclaimer
+
+This project is developed with a security-first and offline-first posture, but no software can guarantee the absence of defects, vulnerabilities, service interruptions, or user harm.
+
+By using this extension, you accept that it is provided on an `as is` and `as available` basis, without warranties of any kind, and the authors and contributors are not liable for damages, losses, incidents, or claims arising from its use.
+
+If you need formal assurance, legal commitments, or incident response guarantees, you should complete your own security review and operational validation before deploying it in a business environment.
 
 ## Attribution
 
