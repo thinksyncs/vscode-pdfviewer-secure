@@ -22,12 +22,12 @@
       "runtimeExecutable": "${execPath}",
       "args": [
         "--extensionDevelopmentPath=${workspaceRoot}",
-        "--extensionTestsPath=${workspaceRoot}/out/test"
+        "--extensionTestsPath=${workspaceRoot}/out/src/test"
       ],
       "stopOnEntry": false,
       "sourceMaps": true,
-      "outFiles": ["${workspaceRoot}/out/test"],
-      "preLaunchTask": "npm"
+      "outFiles": ["${workspaceRoot}/out/src/test/**/*.js"],
+      "preLaunchTask": "npm: compile"
     }
   ]
 }

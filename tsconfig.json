@@ -4,8 +4,12 @@
         "target": "es6",
         "outDir": "out",
         "lib": [
+            "dom",
             "es6"
         ],
+        "strict": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitReturns": true,
         "sourceMap": true,
         "rootDir": "."
     },

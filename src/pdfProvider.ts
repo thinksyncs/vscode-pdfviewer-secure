@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { PdfPreview } from './pdfPreview';
 
 export class PdfCustomProvider implements vscode.CustomReadonlyEditorProvider {
-  public static readonly viewType = 'pdf.preview';
+  public static readonly viewType = 'vscode-pdfviewer.preview';
 
   private readonly _previews = new Set<PdfPreview>();
   private _activePreview: PdfPreview | undefined;
@@ -15,12 +15,12 @@ export class PdfCustomProvider implements vscode.CustomReadonlyEditorProvider {
 
   public async resolveCustomEditor(
     document: vscode.CustomDocument,
-    webviewEditor: vscode.WebviewPanel
+    webviewEditor: vscode.WebviewPanel,
   ): Promise<void> {
     const preview = new PdfPreview(
       this.extensionRoot,
       document.uri,
-      webviewEditor
+      webviewEditor,
     );
     this._previews.add(preview);
     this.setActivePreview(preview);
@@ -39,8 +39,16 @@ export class PdfCustomProvider implements vscode.CustomReadonlyEditorProvider {
     });
   }
 
-  public get activePreview(): PdfPreview {
+  public get activePreview(): PdfPreview | undefined {
     return this._activePreview;
+  }
+
+  public get activePreviewLoadState():
+    | { status: 'loading' }
+    | { status: 'loaded'; pagesCount: number }
+    | { status: 'error'; message: string }
+    | undefined {
+    return this._activePreview?.loadState;
   }
 
   private setActivePreview(value: PdfPreview | undefined): void {
