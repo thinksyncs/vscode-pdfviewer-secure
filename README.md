@@ -1,23 +1,26 @@
 # VSCode PDF Viewer Secure
 
-Security-first, offline-first PDF viewer for VS Code business environments with reduced telemetry exposure.
+Security-first, offline-first PDF viewer for VS Code.
 
-![screenshot](https://user-images.githubusercontent.com/3643499/84454816-98fcd600-ac96-11ea-822c-3ae1e1599a13.gif)
+This is a hardened fork for business environments.
 
-## Update
+![PDF preview](./assets/Screenshot_readme.png)
 
-- Business-oriented secure fork: this project is maintained as a hardened fork for organizations that want to use VS Code with a more controlled local PDF preview surface.
-- Offline-first: PDF rendering and bundled viewer assets stay inside the extension, so local documents can be opened without depending on external services.
-- Security first: the viewer runs under a restrictive webview CSP, disables PDF scripting, and keeps external link handling locked down by default.
-- Telemetry less: the extension does not add its own telemetry pipeline and avoids unnecessary network-connected integrations in the preview flow.
+- Offline-first
+- Security-first
+- Reduced telemetry exposure
 
 ## Security Posture
 
-- Default mode is read-only and opt-in: external links, open-file, download, print, document properties, current-view links, forms, and annotation editing all default to `off`.
-- PDF.js runs inside a VS Code webview with a restrictive CSP, bundled assets only, disabled scripting, and disabled `eval`.
-- The extension does not spawn shells or child processes for previewing PDFs.
+- Read-only by default
+- Feature flags default to `false`
+- Restrictive webview CSP
+- PDF scripting disabled
+- No shell or child-process execution
 
 ## Configuration
+
+All feature flags default to `false`.
 
 - `pdf-preview.features.externalLinks`
 - `pdf-preview.features.openFile`
@@ -28,15 +31,15 @@ Security-first, offline-first PDF viewer for VS Code business environments with 
 - `pdf-preview.features.forms`
 - `pdf-preview.features.annotationEditing`
 
-All feature flags default to `false`. Enable only what your workspace actually needs.
-
 ## Disclaimer
 
-This project is developed with a security-first and offline-first posture, but no software can guarantee the absence of defects, vulnerabilities, service interruptions, or user harm.
+This project is developed with a security-first and offline-first posture.
+However, no software can guarantee the absence of defects, vulnerabilities, outages, or damage.
 
-By using this extension, you accept that it is provided on an `as is` and `as available` basis, without warranties of any kind, and the authors and contributors are not liable for damages, losses, incidents, or claims arising from its use.
+It is provided `as is`, without warranty.
+The authors and contributors are not liable for losses, damages, incidents, or claims arising from its use.
 
-If you need formal assurance, legal commitments, or incident response guarantees, you should complete your own security review and operational validation before deploying it in a business environment.
+Run your own security review before business deployment.
 
 ## Attribution
 
@@ -50,10 +53,8 @@ Original license notices and attribution are preserved in this repository.
 1. Download the latest `pdfjs-*-legacy-dist.zip` from the official [PDF.js releases](https://github.com/mozilla/pdf.js/releases).
 1. Extract the ZIP file.
 1. Overwrite `./lib/*` with the extracted `build/*`, `web/*`, and `LICENSE`.
-   - `lib/web/viewer.html` is used as the source template at runtime. Keep local changes in `lib/pdf.css`, `src/viewerTemplate.ts`, and `src/webview/main.ts`.
-1. The extension overrides `defaultUrl` and the resource paths at runtime, so no manual patching of `viewer.mjs` is needed.
-1. Run `npm run compile` and `npm run test:unit` after upgrading to catch template rewrite regressions.
-1. Run `npm run test:integration` when you want to smoke-test the custom editor in an extension host.
+1. Keep local changes in `lib/pdf.css`, `src/viewerTemplate.ts`, and `src/webview/main.ts`.
+1. Run `npm run compile` and `npm run test:unit`.
 
 ## Change log
 See `CHANGELOG.md`.

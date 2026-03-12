@@ -14,7 +14,7 @@
     "pdf",
     "viewer"
   ],
-  "icon": "image.png",
+  "icon": "assets/image.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/thinksyncs/vscode-pdfviewer-secure.git"
