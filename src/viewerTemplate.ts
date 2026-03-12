@@ -1,4 +1,7 @@
 import * as path from 'path';
+
+// parse5 is only used in the extension host runtime and is bundled as CommonJS.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const parse5 = require('parse5') as {
   parse: (html: string) => HtmlDocument;
   parseFragment: (contextNode: HtmlNode, html: string) => HtmlFragment;
@@ -22,7 +25,7 @@ interface HtmlNode {
   childNodes?: HtmlNode[];
 }
 
-interface HtmlDocument extends HtmlNode {}
+type HtmlDocument = HtmlNode;
 
 interface HtmlFragment extends HtmlNode {
   childNodes: HtmlNode[];
@@ -116,7 +119,9 @@ export function createViewerHtml(
       options.resolveAssetUri(path.posix.join('lib', 'pdf.css')),
     )}">`,
     `<script src="${escapeAttribute(
-      options.resolveAssetUri(path.posix.join('out', 'src', 'webview', 'main.js')),
+      options.resolveAssetUri(
+        path.posix.join('out', 'src', 'webview', 'main.js'),
+      ),
     )}"></script>`,
   ].join('\n');
   const prependFragment = parse5.parseFragment(headNode, headInjection);

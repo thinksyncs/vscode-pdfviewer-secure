@@ -91,7 +91,9 @@ function postHostMessage(message: unknown): void {
 function loadConfig(): PreviewWebviewSettings {
   const elem = document.getElementById('pdf-preview-config');
   if (elem) {
-    return JSON.parse(elem.getAttribute('data-config') ?? '') as PreviewWebviewSettings;
+    return JSON.parse(
+      elem.getAttribute('data-config') ?? '',
+    ) as PreviewWebviewSettings;
   }
   throw new Error('Could not load configuration.');
 }
@@ -122,7 +124,9 @@ function spreadMode(name: SpreadMode): number {
   }
 }
 
-function createLoadOptions(config: PreviewWebviewSettings): Record<string, unknown> {
+function createLoadOptions(
+  config: PreviewWebviewSettings,
+): Record<string, unknown> {
   return {
     url: config.path,
     useWorkerFetch: false,
@@ -231,7 +235,9 @@ function isExternalNavigationHref(href: string): boolean {
   }
 
   try {
-    return new URL(href, window.location.href).origin !== window.location.origin;
+    return (
+      new URL(href, window.location.href).origin !== window.location.origin
+    );
   } catch {
     return /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(href);
   }
@@ -469,7 +475,9 @@ function applyViewerOptions(
 
 function isReloadMessage(value: unknown): value is ReloadMessage {
   return Boolean(
-    value && typeof value === 'object' && (value as ReloadMessage).type === 'reload',
+    value &&
+    typeof value === 'object' &&
+    (value as ReloadMessage).type === 'reload',
   );
 }
 
@@ -541,6 +549,7 @@ window.onerror = (): void => {
     message: 'An unexpected error occurred while loading the PDF.',
   });
   const msg = document.createElement('body');
-  msg.innerText = 'An error occurred while loading the file. Please open it again.';
+  msg.innerText =
+    'An error occurred while loading the file. Please open it again.';
   document.body = msg;
 };

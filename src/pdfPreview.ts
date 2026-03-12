@@ -33,7 +33,7 @@ export class PdfPreview extends Disposable {
   constructor(
     private readonly extensionRoot: vscode.Uri,
     private readonly resource: vscode.Uri,
-    private readonly webviewEditor: vscode.WebviewPanel
+    private readonly webviewEditor: vscode.WebviewPanel,
   ) {
     super();
     const resourceRoot = vscode.Uri.joinPath(resource, '..');
@@ -51,7 +51,7 @@ export class PdfPreview extends Disposable {
               'vscode.openWith',
               resource,
               'default',
-              webviewEditor.viewColumn
+              webviewEditor.viewColumn,
             );
             break;
           }
@@ -70,37 +70,37 @@ export class PdfPreview extends Disposable {
             break;
           }
         }
-      })
+      }),
     );
 
     this._register(
       webviewEditor.onDidChangeViewState(() => {
         this.update();
-      })
+      }),
     );
 
     this._register(
       webviewEditor.onDidDispose(() => {
         this._previewState = 'Disposed';
-      })
+      }),
     );
 
     const watcher = this._register(
-      vscode.workspace.createFileSystemWatcher(resource.fsPath)
+      vscode.workspace.createFileSystemWatcher(resource.fsPath),
     );
     this._register(
       watcher.onDidChange((e) => {
         if (e.toString() === this.resource.toString()) {
           this.reload();
         }
-      })
+      }),
     );
     this._register(
       watcher.onDidDelete((e) => {
         if (e.toString() === this.resource.toString()) {
           this.webviewEditor.dispose();
         }
-      })
+      }),
     );
 
     this.webviewEditor.webview.html = this.getWebviewContents();
@@ -130,9 +130,7 @@ export class PdfPreview extends Disposable {
     return this._loadState;
   }
 
-  private getFeatures(
-    config: vscode.WorkspaceConfiguration,
-  ): PreviewFeatures {
+  private getFeatures(config: vscode.WorkspaceConfiguration): PreviewFeatures {
     return resolvePreviewFeatures((settingName) =>
       config.get<boolean>(settingName),
     );
@@ -143,7 +141,9 @@ export class PdfPreview extends Disposable {
     const docPath = webview.asWebviewUri(this.resource);
     const cspSource = webview.cspSource;
     const resolveAssetUri = (assetPath: string): string => {
-      const uri = vscode.Uri.file(path.join(this.extensionRoot.fsPath, assetPath));
+      const uri = vscode.Uri.file(
+        path.join(this.extensionRoot.fsPath, assetPath),
+      );
       return webview.asWebviewUri(uri).toString();
     };
 
@@ -161,18 +161,17 @@ export class PdfPreview extends Disposable {
       cMapUrl: `${resolveAssetUri(path.posix.join('lib', 'web', 'cmaps'))}/`,
       iccUrl: `${resolveAssetUri(path.posix.join('lib', 'web', 'iccs'))}/`,
       imageResourcesPath: `${resolveAssetUri(
-        path.posix.join('lib', 'web', 'images')
+        path.posix.join('lib', 'web', 'images'),
       )}/`,
       runtime: PREVIEW_RUNTIME_VALUES,
       sandboxBundleSrc: resolveAssetUri(
-        path.posix.join('lib', 'build', 'pdf.sandbox.mjs')
+        path.posix.join('lib', 'build', 'pdf.sandbox.mjs'),
       ),
-      standardFontDataUrl: resolveAssetUri(
-        path.posix.join('lib', 'web', 'standard_fonts')
-      ) + '/',
+      standardFontDataUrl:
+        resolveAssetUri(path.posix.join('lib', 'web', 'standard_fonts')) + '/',
       wasmUrl: `${resolveAssetUri(path.posix.join('lib', 'web', 'wasm'))}/`,
       workerSrc: resolveAssetUri(
-        path.posix.join('lib', 'build', 'pdf.worker.mjs')
+        path.posix.join('lib', 'build', 'pdf.worker.mjs'),
       ),
       path: docPath.toString(),
       features,
@@ -193,7 +192,7 @@ export class PdfPreview extends Disposable {
         this.extensionRoot.fsPath,
         'lib',
         'web',
-        'viewer.html'
+        'viewer.html',
       );
       PdfPreview._viewerTemplate = fs.readFileSync(templatePath, 'utf8');
     }

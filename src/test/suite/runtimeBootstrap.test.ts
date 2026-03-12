@@ -42,8 +42,7 @@ suite('runtime bootstrap', () => {
       };
     };
 
-    const properties =
-      manifest.contributes?.configuration?.properties ?? {};
+    const properties = manifest.contributes?.configuration?.properties ?? {};
 
     for (const featureName of PREVIEW_FEATURE_NAMES) {
       const key = getPreviewFeatureSettingKey(featureName);
@@ -61,7 +60,11 @@ suite('runtime bootstrap', () => {
       'utf8',
     );
 
-    assert.ok(templateSource.includes("path.posix.join('out', 'src', 'webview', 'main.js')"));
+    assert.ok(
+      templateSource.includes(
+        "path.posix.join('out', 'src', 'webview', 'main.js')",
+      ),
+    );
     assert.ok(!templateSource.includes("path.posix.join('lib', 'main.js')"));
   });
 
@@ -78,8 +81,14 @@ suite('runtime bootstrap', () => {
       'utf8',
     );
 
-    assert.ok(webviewSource.includes("config.runtime.annotationEditorModeDisable"));
-    assert.ok(webviewSource.includes("config.runtime.annotationModeEnableForms"));
-    assert.ok(!webviewSource.includes('annotationMode: config.features.forms ? 2 : 1'));
+    assert.ok(
+      webviewSource.includes('config.runtime.annotationEditorModeDisable'),
+    );
+    assert.ok(
+      webviewSource.includes('config.runtime.annotationModeEnableForms'),
+    );
+    assert.ok(
+      !webviewSource.includes('annotationMode: config.features.forms ? 2 : 1'),
+    );
   });
 });
