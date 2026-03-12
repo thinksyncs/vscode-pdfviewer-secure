@@ -16,6 +16,13 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Resolve release version
+        run: |
+          VERSION="${{ github.event.release.tag_name || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "VSIX_NAME=vscode-pdfviewer-secure-$VERSION.vsix" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -37,14 +44,14 @@ jobs:
           test -n "$OVSX_PAT" || { echo "OVSX_PAT is not set"; exit 1; }
 
       - name: Package VSIX
-        run: npx vsce package --out vscode-pdfviewer-secure-${{ github.event.release.tag_name || github.ref_name }}.vsix
+        run: npx vsce package --out "$VSIX_NAME"
 
       - name: Publish release build to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx vsce publish --packagePath vscode-pdfviewer-secure-${{ github.event.release.tag_name || github.ref_name }}.vsix --pat "$VSCE_PAT"
+        run: npx vsce publish --packagePath "$VSIX_NAME" --pat "$VSCE_PAT"
 
       - name: Publish release build to Open VSX
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx ovsx publish vscode-pdfviewer-secure-${{ github.event.release.tag_name || github.ref_name }}.vsix -p "$OVSX_PAT"
+        run: npx ovsx publish "$VSIX_NAME" -p "$OVSX_PAT"
