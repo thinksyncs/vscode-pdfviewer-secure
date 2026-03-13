@@ -1,18 +1,23 @@
 {
   "name": "vscode-pdfviewer-secure",
-  "displayName": "VSCode PDF Viewer Secure",
-  "description": "Security-first, offline-first PDF viewer for VS Code business environments.",
+  "displayName": "PDF Viewer Secure",
+  "description": "Open and preview PDF files in VS Code with security-first, offline-first defaults.",
   "version": "2.0.1",
   "publisher": "ToppyMicroServices",
   "engines": {
     "vscode": "^1.46.0"
   },
   "categories": [
-    "Programming Languages"
+    "Visualization",
+    "Other"
   ],
   "keywords": [
     "pdf",
-    "viewer"
+    "viewer",
+    "preview",
+    "document",
+    "security",
+    "offline"
   ],
   "icon": "assets/image.png",
   "repository": {
@@ -36,7 +41,7 @@
     "customEditors": [
       {
         "viewType": "vscode-pdfviewer.preview",
-        "displayName": "VSCode PDF Viewer Secure",
+        "displayName": "PDF Viewer Secure",
         "selector": [
           {
             "filenamePattern": "*.pdf"
