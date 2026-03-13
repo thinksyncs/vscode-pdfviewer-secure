@@ -64,22 +64,33 @@ jobs:
           const fs = require('fs');
           const alerts = JSON.parse(fs.readFileSync('dependabot-alerts.json', 'utf8'));
           const summary = process.env.GITHUB_STEP_SUMMARY;
+          const runtimeAlerts = alerts.filter((alert) => alert.dependency?.scope !== 'development');
           const counts = alerts.reduce((acc, alert) => {
             const severity = alert.security_advisory?.severity ?? 'unknown';
             acc[severity] = (acc[severity] ?? 0) + 1;
+            return acc;
+          }, {});
+          const scopeCounts = alerts.reduce((acc, alert) => {
+            const scope = alert.dependency?.scope ?? 'unknown';
+            acc[scope] = (acc[scope] ?? 0) + 1;
             return acc;
           }, {});
           const lines = [
             '## Open Dependabot alerts',
             '',
             `- Total: ${alerts.length}`,
+            `- Runtime-scoped: ${runtimeAlerts.length}`,
             ...Object.keys(counts)
               .sort()
               .map((severity) => `- ${severity}: ${counts[severity]}`),
+            ...Object.keys(scopeCounts)
+              .sort()
+              .map((scope) => `- scope:${scope}: ${scopeCounts[scope]}`),
             '',
           ];
           fs.appendFileSync(summary, `${lines.join('\n')}\n`);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `count=${alerts.length}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `runtime_count=${runtimeAlerts.length}\n`);
           NODE
 
       - name: Audit shipped dependencies
@@ -125,9 +136,9 @@ jobs:
             exit 0
           fi
 
-          if [ "${{ steps.alerts.outputs.count }}" != "0" ]; then
+          if [ "${{ steps.alerts.outputs.runtime_count }}" != "0" ]; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "reason=Open Dependabot alerts are present." >> "$GITHUB_OUTPUT"
+            echo "reason=Open runtime Dependabot alerts are present." >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
