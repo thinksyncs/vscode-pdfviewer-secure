@@ -1,0 +1,223 @@
+name: Daily Maintenance Pre-release
+
+on:
+  schedule:
+    - cron: '30 21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+  security-events: read
+
+concurrency:
+  group: daily-maintenance-prerelease
+  cancel-in-progress: false
+
+jobs:
+  prerelease:
+    name: Check PRs and ship pre-release updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Summarize open pull requests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr list --state open --limit 20 --json number,title,isDraft,headRefName,url,author > open-prs.json
+          node <<'NODE'
+          const fs = require('fs');
+          const prs = JSON.parse(fs.readFileSync('open-prs.json', 'utf8'));
+          const summary = process.env.GITHUB_STEP_SUMMARY;
+          const lines = [
+            '## Open pull requests',
+            '',
+            prs.length === 0 ? '- None' : null,
+            ...prs.map((pr) => `- #${pr.number} ${pr.title} (${pr.isDraft ? 'draft' : 'open'}) - ${pr.url}`),
+            '',
+          ].filter(Boolean);
+          fs.appendFileSync(summary, `${lines.join('\n')}\n`);
+          NODE
+
+      - name: Summarize open Dependabot alerts
+        id: alerts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" > dependabot-alerts.json
+          node <<'NODE'
+          const fs = require('fs');
+          const alerts = JSON.parse(fs.readFileSync('dependabot-alerts.json', 'utf8'));
+          const summary = process.env.GITHUB_STEP_SUMMARY;
+          const counts = alerts.reduce((acc, alert) => {
+            const severity = alert.security_advisory?.severity ?? 'unknown';
+            acc[severity] = (acc[severity] ?? 0) + 1;
+            return acc;
+          }, {});
+          const lines = [
+            '## Open Dependabot alerts',
+            '',
+            `- Total: ${alerts.length}`,
+            ...Object.keys(counts)
+              .sort()
+              .map((severity) => `- ${severity}: ${counts[severity]}`),
+            '',
+          ];
+          fs.appendFileSync(summary, `${lines.join('\n')}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `count=${alerts.length}\n`);
+          NODE
+
+      - name: Audit shipped dependencies
+        id: audit
+        run: |
+          set +e
+          npm audit --omit=dev --audit-level=moderate --json > npm-audit-runtime.json
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          node <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('npm-audit-runtime.json', 'utf8'));
+          const vulnerabilities = report.metadata?.vulnerabilities ?? {};
+          const summary = process.env.GITHUB_STEP_SUMMARY;
+          const lines = [
+            '## Runtime dependency audit',
+            '',
+            `- Moderate: ${vulnerabilities.moderate ?? 0}`,
+            `- High: ${vulnerabilities.high ?? 0}`,
+            `- Critical: ${vulnerabilities.critical ?? 0}`,
+            '',
+          ];
+          fs.appendFileSync(summary, `${lines.join('\n')}\n`);
+          NODE
+          exit 0
+
+      - name: Decide whether to build a pre-release
+        id: decision
+        run: |
+          LAST_TAG="$(git describe --tags --match 'v*.*.*' --match 'pre-v*.*.*' --abbrev=0 2>/dev/null || true)"
+          if [ -n "$LAST_TAG" ]; then
+            RANGE="$LAST_TAG..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
+          mapfile -t COMMITS < <(git log --format=%s "$RANGE")
+          printf '%s\n' "${COMMITS[@]}" > commit-subjects.txt
+
+          if [ "${#COMMITS[@]}" -eq 0 ]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=No commits since the last release tag." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ steps.alerts.outputs.count }}" != "0" ]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Open Dependabot alerts are present." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ steps.audit.outputs.status }}" != "0" ]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Runtime dependency audit reported vulnerabilities." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if grep -Ev '^(deps|ci)\(|^Merge pull request #[0-9]+ from dependabot/|^Bump |^build\(deps\):' commit-subjects.txt >/tmp/non-automated-commits.txt; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Commits since the last release include non-automation changes." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NEXT_VERSION="$(node <<'NODE'
+          const pkg = require('./package.json');
+          const [major, minor, patch] = pkg.version.split('.').map(Number);
+          console.log([major, minor, patch + 1].join('.'));
+          NODE
+          )"
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "reason=Safe dependency updates are ready for a pre-release." >> "$GITHUB_OUTPUT"
+          echo "next_version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "pre_tag=pre-v$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "vsix_name=vscode-pdfviewer-secure-$NEXT_VERSION.vsix" >> "$GITHUB_OUTPUT"
+
+      - name: Record release decision
+        run: |
+          {
+            echo "## Pre-release decision"
+            echo
+            echo "- Decision: ${{ steps.decision.outputs.should_release }}"
+            echo "- Reason: ${{ steps.decision.outputs.reason }}"
+            if [ "${{ steps.decision.outputs.should_release }}" = "true" ]; then
+              echo "- Next version: ${{ steps.decision.outputs.next_version }}"
+              echo "- Tag: ${{ steps.decision.outputs.pre_tag }}"
+            fi
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop when no pre-release is needed
+        if: steps.decision.outputs.should_release != 'true'
+        run: exit 0
+
+      - name: Bump package version
+        if: steps.decision.outputs.should_release == 'true'
+        run: npm version "${{ steps.decision.outputs.next_version }}" --no-git-tag-version
+
+      - name: Run tests
+        if: steps.decision.outputs.should_release == 'true'
+        run: npm test
+
+      - name: Package pre-release VSIX
+        if: steps.decision.outputs.should_release == 'true'
+        run: npx vsce package --pre-release --out "${{ steps.decision.outputs.vsix_name }}"
+
+      - name: Commit version bump
+        if: steps.decision.outputs.should_release == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore(release): prepare pre-release v${{ steps.decision.outputs.next_version }}"
+          git push origin HEAD:main
+
+      - name: Create and push pre-release tag
+        if: steps.decision.outputs.should_release == 'true'
+        run: |
+          git tag "${{ steps.decision.outputs.pre_tag }}"
+          git push origin "${{ steps.decision.outputs.pre_tag }}"
+
+      - name: Create GitHub pre-release
+        if: steps.decision.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.decision.outputs.pre_tag }}" "${{ steps.decision.outputs.vsix_name }}" \
+            --title "v${{ steps.decision.outputs.next_version }} pre-release" \
+            --notes "Automated pre-release for daily dependency and security maintenance updates." \
+            --prerelease
+
+      - name: Check publish secret
+        if: steps.decision.outputs.should_release == 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: test -n "$VSCE_PAT" || { echo "VSCE_PAT is not set"; exit 1; }
+
+      - name: Publish pre-release to VS Code Marketplace
+        if: steps.decision.outputs.should_release == 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath "${{ steps.decision.outputs.vsix_name }}" --pat "$VSCE_PAT" --pre-release --skip-duplicate
