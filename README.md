@@ -9,6 +9,13 @@ Open and preview PDF files in VS Code with security-first, offline-first default
 - External links, forms, printing, downloads, and annotation editing stay off unless you enable them
 - Built for security-first, offline-first use in business environments
 
+## Release Channels
+
+- Stable releases publish from `vX.Y.Z` tags to the normal Marketplace channel.
+- Daily releases build and publish to the Marketplace pre-release channel every day.
+- Stable versioning follows normal semver, for example `1.2.3 -> 1.2.4`.
+- Daily versioning uses the next minor line with the GitHub run number, for example `1.2.3 -> 1.3.<run_number>`.
+
 ## Disclaimer
 
 This extension is provided `as is`, without warranty.
