@@ -109,7 +109,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" > dependabot-alerts.json
+          set +e
+          gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" > dependabot-alerts.json 2>dependabot-alerts.err
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## Open Dependabot alerts"
+              echo
+              echo "- Unavailable from GitHub Actions token in this run"
+              echo
+            } > dependabot.md
+            echo "runtime_count=0" >> "$GITHUB_OUTPUT"
+            cat dependabot.md >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           node <<'NODE' > dependabot.md
           const fs = require('fs');
           const alerts = JSON.parse(fs.readFileSync('dependabot-alerts.json', 'utf8'));
