@@ -2,7 +2,7 @@
   "name": "vscode-pdfviewer-secure",
   "displayName": "PDF Viewer Secure",
   "description": "Open and preview PDF files in VS Code with security-first, offline-first defaults.",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "publisher": "ToppyMicroServices",
   "engines": {
     "vscode": "^1.63.0"
@@ -19,7 +19,7 @@
     "security",
     "offline"
   ],
-  "icon": "assets/image.png",
+  "icon": "assets/icon-secure-green.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/thinksyncs/vscode-pdfviewer-secure.git"
