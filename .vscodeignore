@@ -4,6 +4,8 @@
 out/test/**
 test/**
 src/**
+node_modules/**
+!node_modules/parse5/**
 **/*.map
 .gitignore
 tsconfig.json

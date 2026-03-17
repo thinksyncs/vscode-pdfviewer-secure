@@ -2,7 +2,7 @@
   "name": "vscode-pdfviewer-secure",
   "displayName": "PDF Viewer Secure",
   "description": "Open and preview PDF files in VS Code with security-first, offline-first defaults.",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "publisher": "ToppyMicroServices",
   "engines": {
     "vscode": "^1.63.0"
@@ -149,11 +149,12 @@
     "package": "vsce package"
   },
   "dependencies": {
-    "@types/vscode": "^1.110.0"
+    "parse5": "6.0.1"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.13.10",
+    "@types/vscode": "^1.63.0",
     "@typescript-eslint/eslint-plugin": "^8.57.1",
     "@typescript-eslint/parser": "^8.27.0",
     "@vscode/test-electron": "^2.5.2",
