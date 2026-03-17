@@ -149,7 +149,7 @@
     "package": "vsce package"
   },
   "dependencies": {
-    "parse5": "6.0.1"
+    "parse5": "8.0.0"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
