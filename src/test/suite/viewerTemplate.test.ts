@@ -3,6 +3,26 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createViewerHtml } from '../../viewerTemplate';
 
+interface ParsedNode {
+  tagName?: string;
+  attrs?: { name: string; value: string }[];
+  childNodes?: ParsedNode[];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const parse5 = require('parse5') as { parse: (html: string) => ParsedNode };
+
+function findNodes(node: ParsedNode, tagName: string): ParsedNode[] {
+  return [
+    ...(node.tagName === tagName ? [node] : []),
+    ...(node.childNodes ?? []).flatMap((child) => findNodes(child, tagName)),
+  ];
+}
+
+function attribute(node: ParsedNode, name: string): string | undefined {
+  return node.attrs?.find((item) => item.name === name)?.value;
+}
+
 suite('viewerTemplate', () => {
   const baseTemplate = `<!DOCTYPE html>
 <html dir="ltr">
@@ -38,11 +58,14 @@ suite('viewerTemplate', () => {
     assert.ok(html.includes('script-src vscode-webview://preview;'));
     assert.ok(html.includes("script-src-attr 'none';"));
     assert.ok(html.includes('style-src vscode-webview://preview;'));
-    assert.ok(html.includes("style-src-attr 'unsafe-inline';"));
+    assert.ok(html.includes("style-src-attr 'none';"));
     assert.ok(!html.includes("script-src 'unsafe-inline'"));
     assert.ok(html.includes('worker-src blob: vscode-webview://preview;'));
     assert.ok(html.includes('href="#"'));
-    assert.ok(!html.includes('https://support.mozilla.org'));
+    assert.deepStrictEqual(
+      findNodes(parse5.parse(html), 'a').map((node) => attribute(node, 'href')),
+      ['#', '#'],
+    );
   });
 
   test('escapes config before embedding it as an attribute', () => {
@@ -69,7 +92,37 @@ suite('viewerTemplate', () => {
     });
 
     assert.ok(html.includes('<a href="#">external</a>'));
-    assert.ok(!html.includes('href="https://support.mozilla.org'));
+    assert.deepStrictEqual(
+      findNodes(parse5.parse(html), 'a').map((node) => attribute(node, 'href')),
+      ['#', '#'],
+    );
+  });
+
+  test('preserves JSON exactly across HTML character-reference decoding', () => {
+    for (const quote of ['&quot;', '&#34;', '&#x22;']) {
+      const config = {
+        workerSrc: 'webview:lib/build/pdf.worker.mjs',
+        features: { externalLinks: false },
+        defaults: {
+          scale: `auto${quote}},${quote}workerSrc${quote}:${quote}INJECTED${quote},${quote}extra${quote}:{${quote}key${quote}:${quote}value`,
+        },
+        ordinaryText: 'A&B <tag> "quoted" &amp; &apos; 日本語',
+      };
+      const html = createViewerHtml(baseTemplate, {
+        cspSource: 'vscode-webview://preview',
+        resolveAssetUri: (assetPath) => `webview:${assetPath}`,
+        serializedConfig: JSON.stringify(config),
+        allowExternalLinks: false,
+      });
+      const meta = findNodes(parse5.parse(html), 'meta').find(
+        (node) => attribute(node, 'id') === 'pdf-preview-config',
+      );
+      assert.ok(meta);
+      assert.deepStrictEqual(
+        JSON.parse(attribute(meta, 'data-config') ?? ''),
+        config,
+      );
+    }
   });
 
   test('removes external hrefs from the bundled upstream viewer', () => {
@@ -123,5 +176,27 @@ suite('viewerTemplate', () => {
     assert.ok(html.includes('href="webview:lib/web/viewer.css"'));
     assert.ok(html.includes('src="webview:lib/build/pdf.mjs"'));
     assert.ok(html.includes('<a href="#">external</a>'));
+  });
+
+  test('removes static inline styles from the upstream template', () => {
+    const styledTemplate = `<!DOCTYPE html>
+<html dir="ltr">
+  <head>
+    <link rel="stylesheet" href="viewer.css">
+  </head>
+  <body>
+    <dialog id="printServiceDialog" style="min-width: 200px"></dialog>
+  </body>
+</html>`;
+
+    const html = createViewerHtml(styledTemplate, {
+      cspSource: 'vscode-webview://preview',
+      resolveAssetUri: (assetPath) => `webview:${assetPath}`,
+      serializedConfig: '{"path":"file:///tmp/sample.pdf"}',
+      allowExternalLinks: false,
+    });
+
+    assert.ok(html.includes('id="printServiceDialog"'));
+    assert.ok(!html.includes('style="min-width: 200px"'));
   });
 });

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*.*.*'
   pull_request:
   workflow_dispatch:
 
@@ -36,17 +38,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit all dependencies
+        run: npm audit --audit-level=low
+
       - name: Lint
         run: npm run lint
 
       - name: Test
         run: npm test
 
-  package:
-    name: Package VSIX (ubuntu-latest)
-    needs: validate
+  integration:
+    name: Integration Test (VS Code ${{ matrix.vscode }}, ubuntu-latest)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        vscode:
+          - '1.111.0'
+          - stable
+    env:
+      VSCODE_VERSION: ${{ matrix.vscode }}
 
     steps:
       - name: Checkout
@@ -61,12 +73,53 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run integration tests
+        run: xvfb-run -a npm run test:integration
+
+  package:
+    name: Package VSIX (ubuntu-latest)
+    needs:
+      - validate
+      - integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VSIX_NAME: vscode-pdfviewer-secure-ci.vsix
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Run integration tests
+        run: xvfb-run -a npm run test:integration
+
       - name: Package VSIX
-        run: npm run package
+        run: npm run package -- --out "$VSIX_NAME"
+
+      - name: Test packaged VSIX
+        run: |
+          PACKAGED_EXTENSION_ROOT="$(mktemp -d "$RUNNER_TEMP/pdfviewer-vsix.XXXXXX")"
+          python3 -m zipfile -e "$VSIX_NAME" "$PACKAGED_EXTENSION_ROOT"
+          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" xvfb-run -a npm run test:integration
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v7
         with:
           name: vsix
-          path: "*.vsix"
+          path: ${{ env.VSIX_NAME }}
           if-no-files-found: error

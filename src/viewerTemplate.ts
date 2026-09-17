@@ -39,7 +39,11 @@ export interface ViewerHtmlOptions {
 }
 
 function escapeAttribute(value: string): string {
-  return value.replace(/"/g, '&quot;');
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 function isLocalAssetPath(value: string): boolean {
@@ -62,13 +66,19 @@ function rewriteTemplateAssetUrls(
       headNode = node;
     }
 
+    const nextAttrs: HtmlAttribute[] = [];
     for (const attribute of node.attrs ?? []) {
+      if (attribute.name === 'style') {
+        continue;
+      }
+
       if (
         attribute.name === 'href' &&
         HTTP_URI_SCHEME.test(attribute.value) &&
         !allowExternalLinks
       ) {
         attribute.value = '#';
+        nextAttrs.push(attribute);
         continue;
       }
 
@@ -81,6 +91,12 @@ function rewriteTemplateAssetUrls(
         );
         attribute.value = resolveAssetUri(assetPath);
       }
+
+      nextAttrs.push(attribute);
+    }
+
+    if (node.attrs) {
+      node.attrs = nextAttrs;
     }
 
     for (const childNode of node.childNodes ?? []) {
@@ -108,7 +124,7 @@ export function createViewerHtml(
 
   const headInjection = [
     '<meta http-equiv="X-UA-Compatible" content="IE=edge">',
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; connect-src ${options.cspSource}; script-src ${options.cspSource}; script-src-elem ${options.cspSource}; script-src-attr 'none'; style-src ${options.cspSource}; style-src-elem ${options.cspSource}; style-src-attr 'unsafe-inline'; img-src blob: data: ${options.cspSource}; font-src ${options.cspSource}; worker-src blob: ${options.cspSource};">`,
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; object-src 'none'; connect-src ${options.cspSource}; script-src ${options.cspSource}; script-src-elem ${options.cspSource}; script-src-attr 'none'; style-src ${options.cspSource}; style-src-elem ${options.cspSource}; style-src-attr 'none'; img-src blob: data: ${options.cspSource}; font-src ${options.cspSource}; worker-src blob: ${options.cspSource};">`,
     `<meta id="pdf-preview-config" data-config="${escapeAttribute(
       options.serializedConfig,
     )}">`,

@@ -19,7 +19,7 @@ jobs:
   daily-prerelease:
     name: Build and publish daily pre-release
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -45,6 +45,10 @@ jobs:
           else
             STABLE_VERSION="${STABLE_TAG#v}"
           fi
+          if [[ ! "$STABLE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Stable version must be a numeric release version."
+            exit 1
+          fi
 
           DAILY_VERSION="$(STABLE_VERSION="$STABLE_VERSION" GITHUB_RUN_NUMBER="${{ github.run_number }}" node <<'NODE'
           const stable = process.env.STABLE_VERSION;
@@ -55,11 +59,13 @@ jobs:
           NODE
           )"
 
-          echo "stable_tag=$STABLE_TAG" >> "$GITHUB_OUTPUT"
-          echo "stable_version=$STABLE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "daily_version=$DAILY_VERSION" >> "$GITHUB_OUTPUT"
-          echo "daily_tag=daily-prerelease" >> "$GITHUB_OUTPUT"
-          echo "vsix_name=vscode-pdfviewer-secure-daily.vsix" >> "$GITHUB_OUTPUT"
+          {
+            echo "stable_tag=$STABLE_TAG"
+            echo "stable_version=$STABLE_VERSION"
+            echo "daily_version=$DAILY_VERSION"
+            echo "daily_tag=daily-prerelease"
+            echo "vsix_name=vscode-pdfviewer-secure-daily.vsix"
+          } >> "$GITHUB_OUTPUT"
       - name: Summarize open pull requests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -110,7 +116,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" > dependabot-alerts.json 2>dependabot-alerts.err
+          gh api --paginate --slurp "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" > dependabot-alerts.json 2>dependabot-alerts.err
           status=$?
           echo "status=$status" >> "$GITHUB_OUTPUT"
           if [ "$status" -ne 0 ]; then
@@ -120,13 +126,13 @@ jobs:
               echo "- Unavailable from GitHub Actions token in this run"
               echo
             } > dependabot.md
-            echo "runtime_count=0" >> "$GITHUB_OUTPUT"
+            echo "runtime_count=unavailable" >> "$GITHUB_OUTPUT"
             cat dependabot.md >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           node <<'NODE' > dependabot.md
           const fs = require('fs');
-          const alerts = JSON.parse(fs.readFileSync('dependabot-alerts.json', 'utf8'));
+          const alerts = JSON.parse(fs.readFileSync('dependabot-alerts.json', 'utf8')).flat();
           const runtimeAlerts = alerts.filter((alert) => alert.dependency?.scope !== 'development');
           const counts = alerts.reduce((acc, alert) => {
             const severity = alert.security_advisory?.severity ?? 'unknown';
@@ -145,41 +151,60 @@ jobs:
           NODE
           cat dependabot.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Audit shipped dependencies
+      - name: Audit all dependencies
         id: audit
         run: |
           set +e
-          npm audit --omit=dev --audit-level=moderate --json > npm-audit-runtime.json
+          npm audit --audit-level=low --json > npm-audit-full.json
           status=$?
+          set -e
           echo "status=$status" >> "$GITHUB_OUTPUT"
-          node <<'NODE' > runtime-audit.md
+          node <<'NODE' > dependency-audit.md
           const fs = require('fs');
-          const report = JSON.parse(fs.readFileSync('npm-audit-runtime.json', 'utf8'));
-          const vulnerabilities = report.metadata?.vulnerabilities ?? {};
-          console.log('## Runtime dependency audit');
+          const report = JSON.parse(fs.readFileSync('npm-audit-full.json', 'utf8'));
+          if (!report.metadata?.vulnerabilities) {
+            throw new Error('npm audit did not return vulnerability metadata.');
+          }
+          const vulnerabilities = report.metadata.vulnerabilities;
+          console.log('## Full npm dependency audit');
           console.log('');
+          console.log(`- Low: ${vulnerabilities.low ?? 0}`);
           console.log(`- Moderate: ${vulnerabilities.moderate ?? 0}`);
           console.log(`- High: ${vulnerabilities.high ?? 0}`);
           console.log(`- Critical: ${vulnerabilities.critical ?? 0}`);
           console.log('');
           NODE
-          cat runtime-audit.md >> "$GITHUB_STEP_SUMMARY"
+          cat dependency-audit.md >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
-      - name: Stop on runtime security issues
-        if: steps.alerts.outputs.runtime_count != '0' || steps.audit.outputs.status != '0'
+      - name: Stop on dependency security issues
+        if: (steps.alerts.outputs.status == '0' && steps.alerts.outputs.runtime_count != '0') || steps.audit.outputs.status != '0'
         run: |
-          echo "Runtime security checks reported issues. Daily pre-release will not be published."
+          echo "Dependency security checks reported issues or the npm audit failed. Daily pre-release will not be published."
           exit 1
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run integration tests
+        run: xvfb-run -a npm run test:integration
 
       - name: Set daily build version
         run: npm version "${{ steps.version.outputs.daily_version }}" --no-git-tag-version
 
-      - name: Run tests
-        run: npm test
-
       - name: Package daily pre-release VSIX
         run: npx vsce package --pre-release --out "${{ steps.version.outputs.vsix_name }}"
+
+      - name: Test packaged VSIX
+        env:
+          VSIX_NAME: ${{ steps.version.outputs.vsix_name }}
+        run: |
+          PACKAGED_EXTENSION_ROOT="$(mktemp -d "$RUNNER_TEMP/pdfviewer-vsix.XXXXXX")"
+          python3 -m zipfile -e "$VSIX_NAME" "$PACKAGED_EXTENSION_ROOT"
+          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" xvfb-run -a npm run test:integration
 
       - name: Build daily release notes
         run: |
@@ -194,7 +219,7 @@ jobs:
             cat open-prs.md
             cat codeql.md
             cat dependabot.md
-            cat runtime-audit.md
+            cat dependency-audit.md
           } > daily-release-notes.md
 
       - name: Move daily pre-release tag

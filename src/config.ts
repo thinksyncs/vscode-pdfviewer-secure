@@ -71,14 +71,16 @@ export function getPreviewFeatureSettingKey(
 }
 
 export function resolvePreviewFeatures(
-  getSetting: (settingName: string) => boolean | undefined,
+  getSetting: (settingName: string) => unknown,
 ): PreviewFeatures {
   const features = {} as PreviewFeatures;
 
   for (const featureName of PREVIEW_FEATURE_NAMES) {
+    const value = getSetting(`features.${featureName}`);
     features[featureName] =
-      getSetting(`features.${featureName}`) ??
-      PREVIEW_FEATURE_DEFAULTS[featureName];
+      typeof value === 'boolean'
+        ? value
+        : PREVIEW_FEATURE_DEFAULTS[featureName];
   }
 
   return features;

@@ -1,14 +1,10 @@
-/* Keep upstream viewer.html intact and hide actions that don't make sense in VS Code. */
-#secondaryOpenFile,
-#secondaryPrint,
-#secondaryDownload,
+/* Feature controls are hidden by the webview runtime according to settings. */
+[data-pdf-preview-hidden='true'],
 #presentationMode,
-#viewBookmark,
-#openFile,
-#print,
-#download,
-#editorModeButtons,
-#editorModeSeparator,
 #fileInput {
   display: none !important;
+}
+
+#printServiceDialog {
+  min-width: 200px;
 }

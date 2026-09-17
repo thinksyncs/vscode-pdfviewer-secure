@@ -28,6 +28,9 @@ export class PdfCustomProvider implements vscode.CustomReadonlyEditorProvider {
     webviewEditor.onDidDispose(() => {
       preview.dispose();
       this._previews.delete(preview);
+      if (this._activePreview === preview) {
+        this.setActivePreview(undefined);
+      }
     });
 
     webviewEditor.onDidChangeViewState(() => {

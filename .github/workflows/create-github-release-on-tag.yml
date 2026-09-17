@@ -7,20 +7,28 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    name: Release Extension
+  validate-release:
+    name: Validate Release Candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    outputs:
+      vsix_name: ${{ steps.version.outputs.vsix_name }}
 
     steps:
       - name: Resolve version and VSIX name
+        id: version
         run: |
+          if [[ "$GITHUB_REF_TYPE" != tag || ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Select a version tag such as v2.0.6."
+            exit 1
+          fi
           VERSION="${GITHUB_REF_NAME#v}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "VSIX_NAME=vscode-pdfviewer-secure-$VERSION.vsix" >> "$GITHUB_ENV"
+          echo "vsix_name=vscode-pdfviewer-secure-$VERSION.vsix" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -34,6 +42,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit all dependencies
+        run: npm audit --audit-level=low
+
       - name: Verify tag matches package version
         run: |
           PACKAGE_VERSION="$(node -p "require('./package.json').version")"
@@ -42,28 +53,81 @@ jobs:
             exit 1
           }
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run integration tests
+        run: xvfb-run -a npm run test:integration
+
       - name: Package VSIX
         run: npx vsce package --out "$VSIX_NAME"
+
+      - name: Test packaged VSIX
+        run: |
+          PACKAGED_EXTENSION_ROOT="$(mktemp -d "$RUNNER_TEMP/pdfviewer-vsix.XXXXXX")"
+          python3 -m zipfile -e "$VSIX_NAME" "$PACKAGED_EXTENSION_ROOT"
+          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" xvfb-run -a npm run test:integration
+
+      - name: Record VSIX checksum
+        run: sha256sum "$VSIX_NAME" > "$VSIX_NAME.sha256"
+
+      - name: Upload validated VSIX
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-vsix
+          path: |
+            ${{ env.VSIX_NAME }}
+            ${{ env.VSIX_NAME }}.sha256
+          if-no-files-found: error
+
+  release:
+    name: Release Extension
+    needs: validate-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VSIX_NAME: ${{ needs.validate-release.outputs.vsix_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install publishing tools
+        run: npm ci --ignore-scripts
+
+      - name: Download validated VSIX
+        uses: actions/download-artifact@v8
+        with:
+          name: release-vsix
+
+      - name: Verify VSIX checksum
+        run: sha256sum --check "$VSIX_NAME.sha256"
 
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" "$VSIX_NAME" --generate-notes --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" "$VSIX_NAME" "$VSIX_NAME.sha256" --generate-notes --verify-tag
 
-      - name: Check publish secrets
+      - name: Check publish secret
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
           test -n "$VSCE_PAT" || { echo "VSCE_PAT is not set"; exit 1; }
-          test -n "$OVSX_PAT" || { echo "OVSX_PAT is not set"; exit 1; }
 
       - name: Publish release build to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npx vsce publish --packagePath "$VSIX_NAME" --pat "$VSCE_PAT" --skip-duplicate
-
-      - name: Publish release build to Open VSX
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: npx ovsx publish "$VSIX_NAME" -p "$OVSX_PAT"

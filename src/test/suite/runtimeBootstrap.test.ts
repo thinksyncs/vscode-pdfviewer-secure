@@ -10,6 +10,15 @@ import {
 } from '../../config';
 
 suite('runtime bootstrap', () => {
+  test('does not enable features from malformed workspace values', () => {
+    for (const value of ['false', 'true', 1, {}, [], null]) {
+      assert.deepStrictEqual(
+        resolvePreviewFeatures(() => value),
+        PREVIEW_FEATURE_DEFAULTS,
+      );
+    }
+  });
+
   test('resolves preview features from shared defaults', () => {
     const features = resolvePreviewFeatures((settingName) => {
       if (settingName === 'features.print') {

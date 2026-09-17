@@ -1,5 +1,50 @@
 # Changelog
 
+## 2.2.0 (2026-09-17)
+
+- Fix viewer startup, receive PDF.js initialization events, and load the bundled worker through a Blob URL.
+- Prevent workspace settings from changing executable viewer resource URLs.
+- Keep external links disabled across reloads and apply download restrictions to embedded attachments.
+- Enforce file-import controls and restore the toolbar controls when their features are enabled.
+- Release references to closed previews and preserve view settings across reloads.
+- Report asynchronous load failures and allow an explicit reload to recover.
+- Remove a duplicate image from the VSIX and refresh vulnerable development dependencies.
+- Require VS Code 1.111 or later and verify rendering with isolated extension-host tests.
+- Publish the validated VSIX to Marketplace with full dependency audit gates.
+
+## 2.0.5 (2026-03-17)
+
+- Fix VSIX packaging so `parse5` ships as a runtime dependency.
+- Keep Marketplace and Open VSX installs aligned with the packaged extension host runtime.
+
+## 2.0.4 (2026-03-14)
+
+- Re-publish the secure release after Marketplace packaging and channel checks.
+
+## 2.0.3 (2026-03-14)
+
+- Add daily pre-release automation for the Marketplace pre-release channel.
+- Refresh the secure icon set and align pre-release versioning with the stable channel.
+
+## 2.0.2 (2026-03-14)
+
+- Add CI, daily vulnerability audit, and Dependabot automation.
+- Refine Marketplace metadata and add a repository security policy.
+
+## 2.0.1 (2026-03-12)
+
+- Publish the ToppyMicroServices-branded release line.
+- Automate stable registry publishing from the GitHub release workflow.
+
+## 2.0.0 (2026-03-12)
+
+- Start the security-first, offline-first ToppyMicroServices fork.
+- Harden the bundled PDF.js wrapper with opt-in feature flags and tightened webview defaults.
+
+## Upstream History
+
+The entries below capture the original upstream changelog before the secure fork.
+
 ## 1.2.2 (2022/12/23)
 
 - Fix about rendering Unicode characters

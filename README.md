@@ -9,6 +9,8 @@ Open and preview PDF files in VS Code with security-first, offline-first default
 - External links, forms, printing, downloads, and annotation editing stay off unless you enable them
 - Built for security-first, offline-first use in business environments
 
+Requires VS Code 1.111 or later. PDF scripting stays disabled, including when forms are enabled. Download controls also apply to embedded attachments.
+
 ## Release Channels
 
 - Stable releases publish from `vX.Y.Z` tags to the normal Marketplace channel.

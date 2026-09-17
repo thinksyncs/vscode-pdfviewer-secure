@@ -1,9 +1,9 @@
-import type {
-  CursorTool,
-  PreviewWebviewSettings,
-  ScrollMode,
-  SpreadMode,
-} from '../config';
+// Keep this entry point a classic browser script. A top-level import would
+// emit CommonJS exports, which are unavailable inside the webview.
+type CursorTool = import('../config').CursorTool;
+type PreviewWebviewSettings = import('../config').PreviewWebviewSettings;
+type ScrollMode = import('../config').ScrollMode;
+type SpreadMode = import('../config').SpreadMode;
 
 interface ReloadMessage {
   type: 'reload';
@@ -23,6 +23,17 @@ interface ViewerState {
 
 interface PdfLinkService {
   externalLinkEnabled: boolean;
+  addLinkAttributes: (
+    link: HTMLAnchorElement,
+    url: string,
+    newWindow?: boolean,
+  ) => void;
+}
+
+interface DownloadManager {
+  download: (...args: unknown[]) => void;
+  downloadData: (...args: unknown[]) => void;
+  openOrDownloadData: (...args: unknown[]) => boolean;
 }
 
 interface PdfCursorTools {
@@ -52,6 +63,7 @@ interface PdfViewerApp {
   page: number;
   pagesCount: number;
   pdfLinkService?: PdfLinkService;
+  downloadManager?: DownloadManager;
   pdfCursorTools: PdfCursorTools;
   pdfViewer: PdfViewer;
   viewsManager?: ViewsManager;
@@ -65,11 +77,9 @@ interface PdfViewerApplicationOptions {
 
 declare function acquireVsCodeApi(): VsCodeApi;
 
-declare global {
-  interface Window {
-    PDFViewerApplication: PdfViewerApp;
-    PDFViewerApplicationOptions: PdfViewerApplicationOptions;
-  }
+interface Window {
+  PDFViewerApplication: PdfViewerApp;
+  PDFViewerApplicationOptions: PdfViewerApplicationOptions;
 }
 
 let vscodeApi: VsCodeApi | undefined;
@@ -86,6 +96,47 @@ function getVsCodeApi(): VsCodeApi | undefined {
 
 function postHostMessage(message: unknown): void {
   getVsCodeApi()?.postMessage(message);
+}
+
+function reportDocumentError(error: unknown): void {
+  postHostMessage({
+    type: 'document-error',
+    message: error instanceof Error ? error.message : String(error),
+  });
+}
+
+async function initializeWorker(config: PreviewWebviewSettings): Promise<void> {
+  // VS Code webview workers cannot import extension resource URLs. Fetch the
+  // bundled worker once and give PDF.js its port without changing upstream code.
+  const response = await fetch(config.workerSrc);
+  if (!response.ok) {
+    throw new Error(`Could not load the PDF worker (${response.status}).`);
+  }
+  const workerUrl = URL.createObjectURL(
+    new Blob([await response.arrayBuffer()], { type: 'text/javascript' }),
+  );
+  let worker: Worker;
+  try {
+    worker = new Worker(workerUrl, { type: 'module' });
+  } catch (error) {
+    URL.revokeObjectURL(workerUrl);
+    throw error;
+  }
+  worker.addEventListener('message', () => URL.revokeObjectURL(workerUrl), {
+    once: true,
+  });
+  worker.addEventListener('error', () => {
+    reportDocumentError(new Error('The PDF worker failed.'));
+  });
+  window.addEventListener(
+    'beforeunload',
+    () => {
+      worker.terminate();
+      URL.revokeObjectURL(workerUrl);
+    },
+    { once: true },
+  );
+  window.PDFViewerApplicationOptions.set('workerPort', worker);
 }
 
 function loadConfig(): PreviewWebviewSettings {
@@ -155,6 +206,7 @@ function setElementHidden(
     element.hidden = hidden;
   }
   element.setAttribute('aria-hidden', hidden ? 'true' : 'false');
+  element.setAttribute('data-pdf-preview-hidden', hidden ? 'true' : 'false');
 
   if (
     element instanceof HTMLButtonElement ||
@@ -187,6 +239,7 @@ function applyFeatureVisibility(config: PreviewWebviewSettings): void {
   }
   if (!config.features.openFile) {
     hideElementById('secondaryOpenFile');
+    hideElementById('viewsManagerAddFileButton');
   }
   if (!config.features.currentView) {
     hideElementById('viewBookmark');
@@ -202,6 +255,7 @@ function applyFeatureVisibility(config: PreviewWebviewSettings): void {
   if (!config.features.download) {
     hideElementById('downloadButton');
     hideElementById('secondaryDownload');
+    hideElementById('viewsManagerStatusActionSaveAs');
   }
   if (!config.features.print && !config.features.download) {
     hideToolbarGroupFor('printButton');
@@ -247,12 +301,68 @@ function blockDisallowedActions(
   app: PdfViewerApp,
   config: PreviewWebviewSettings,
 ): void {
+  const linkService = app.pdfLinkService;
+  if (linkService) {
+    const addLinkAttributes = linkService.addLinkAttributes.bind(linkService);
+    linkService.addLinkAttributes = (link, url, newWindow): void => {
+      // PDF.js resets this flag on close; enforce the preference at rendering.
+      const enabled = linkService.externalLinkEnabled;
+      linkService.externalLinkEnabled =
+        enabled && config.features.externalLinks;
+      try {
+        addLinkAttributes(link, url, newWindow);
+      } finally {
+        linkService.externalLinkEnabled = enabled;
+      }
+    };
+  }
+
+  if (!config.features.download && app.downloadManager) {
+    // Attachments and named SaveAs actions can bypass the toolbar event bus.
+    app.downloadManager.download = (): void => {};
+    app.downloadManager.downloadData = (): void => {};
+    app.downloadManager.openOrDownloadData = (): boolean => false;
+  }
+
   const blockedEvents = new Set<string>();
   if (!config.features.openFile) {
     blockedEvents.add('openfile');
+    blockedEvents.add('fileinputchange');
+
+    const open = app.open.bind(app);
+    app.open = (args): Promise<void> => {
+      if (args.url !== config.path || args.data !== undefined) {
+        return Promise.resolve();
+      }
+      return open(args);
+    };
+
+    const blockPdfDrop = (event: DragEvent): void => {
+      const transfer = event.dataTransfer;
+      if (
+        !transfer ||
+        !(
+          Array.from(transfer.items).some(
+            (item) => item.kind === 'file' && item.type === 'application/pdf',
+          ) ||
+          Array.from(transfer.files).some(
+            (file) =>
+              file.type === 'application/pdf' || /\.pdf$/i.test(file.name),
+          )
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      transfer.dropEffect = 'none';
+    };
+    window.addEventListener('dragover', blockPdfDrop, true);
+    window.addEventListener('drop', blockPdfDrop, true);
   }
   if (!config.features.download) {
     blockedEvents.add('download');
+    blockedEvents.add('savepageseditedpdf');
   }
   if (!config.features.print) {
     blockedEvents.add('print');
@@ -260,6 +370,9 @@ function blockDisallowedActions(
   }
   if (!config.features.annotationEditing) {
     blockedEvents.add('switchannotationeditormode');
+  }
+  if (!config.features.documentProperties) {
+    blockedEvents.add('documentproperties');
   }
 
   if (blockedEvents.size > 0) {
@@ -284,57 +397,55 @@ function blockDisallowedActions(
     true,
   );
 
-  window.addEventListener(
-    'click',
-    (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
+  const blockClick = (event: MouseEvent): void => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const anchor = target.closest('a[href]');
+    if (anchor instanceof HTMLAnchorElement) {
+      if (!config.features.currentView && anchor.id === 'viewBookmark') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
         return;
       }
-
-      const anchor = target.closest('a[href]');
-      if (anchor instanceof HTMLAnchorElement) {
-        if (!config.features.currentView && anchor.id === 'viewBookmark') {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          return;
-        }
-        if (
-          !config.features.externalLinks &&
-          isExternalNavigationHref(anchor.getAttribute('href') ?? '')
-        ) {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          return;
-        }
-      }
-
-      const control = target.closest(
-        '#secondaryOpenFile, #printButton, #secondaryPrint, #downloadButton, #secondaryDownload, #documentProperties',
-      );
-      if (!control) {
+      if (
+        !config.features.externalLinks &&
+        isExternalNavigationHref(anchor.getAttribute('href') ?? '')
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
         return;
       }
+    }
 
-      const disabled =
-        (!config.features.openFile && control.id === 'secondaryOpenFile') ||
-        (!config.features.print &&
-          (control.id === 'printButton' || control.id === 'secondaryPrint')) ||
-        (!config.features.download &&
-          (control.id === 'downloadButton' ||
-            control.id === 'secondaryDownload')) ||
-        (!config.features.documentProperties &&
-          control.id === 'documentProperties');
+    const control = target.closest(
+      '#secondaryOpenFile, #printButton, #secondaryPrint, #downloadButton, #secondaryDownload, #documentProperties',
+    );
+    if (!control) {
+      return;
+    }
 
-      if (!disabled) {
-        return;
-      }
+    const disabled =
+      (!config.features.openFile && control.id === 'secondaryOpenFile') ||
+      (!config.features.print &&
+        (control.id === 'printButton' || control.id === 'secondaryPrint')) ||
+      (!config.features.download &&
+        (control.id === 'downloadButton' ||
+          control.id === 'secondaryDownload')) ||
+      (!config.features.documentProperties &&
+        control.id === 'documentProperties');
 
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    },
-    true,
-  );
+    if (!disabled) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  window.addEventListener('click', blockClick, true);
+  window.addEventListener('auxclick', blockClick, true);
 }
 
 function applyViewerState(
@@ -386,11 +497,27 @@ function onceDocumentLoaded(
   app: PdfViewerApp,
   action: () => void,
 ): { promise: Promise<void>; dispose: () => void } {
-  let handler: ((event?: unknown) => void) | undefined;
+  let onLoaded: (() => void) | undefined;
+  let onInitialized: (() => void) | undefined;
+  const dispose = (): void => {
+    if (onLoaded) {
+      app.eventBus.off('documentloaded', onLoaded);
+      onLoaded = undefined;
+    }
+    if (onInitialized) {
+      app.eventBus.off('documentinit', onInitialized);
+      onInitialized = undefined;
+    }
+  };
   const promise = new Promise<void>((resolve, reject) => {
-    handler = (): void => {
-      app.eventBus.off('documentloaded', handler as (event?: unknown) => void);
-
+    let loaded = false;
+    let initialized = false;
+    const finish = (): void => {
+      // Initial view setup can finish after documentloaded and reset the view.
+      if (!loaded || !initialized) {
+        return;
+      }
+      dispose();
       try {
         action();
         resolve();
@@ -398,19 +525,19 @@ function onceDocumentLoaded(
         reject(error);
       }
     };
-
-    app.eventBus.on('documentloaded', handler);
+    onLoaded = (): void => {
+      loaded = true;
+      finish();
+    };
+    onInitialized = (): void => {
+      initialized = true;
+      finish();
+    };
+    app.eventBus.on('documentloaded', onLoaded);
+    app.eventBus.on('documentinit', onInitialized);
   });
 
-  return {
-    promise,
-    dispose: (): void => {
-      if (handler) {
-        app.eventBus.off('documentloaded', handler);
-        handler = undefined;
-      }
-    },
-  };
+  return { promise, dispose };
 }
 
 async function openDocument(
@@ -454,6 +581,7 @@ function applyViewerOptions(
   options.set('sandboxBundleSrc', config.sandboxBundleSrc);
   options.set('standardFontDataUrl', config.standardFontDataUrl);
   options.set('defaultZoomValue', config.defaults.scale);
+  options.set('defaultUrl', '');
   options.set('enableAutoLinking', config.features.externalLinks);
   options.set('enableComment', config.features.annotationEditing);
   options.set('enableSignatureEditor', config.features.annotationEditing);
@@ -483,62 +611,93 @@ function isReloadMessage(value: unknown): value is ReloadMessage {
 
 const config = loadConfig();
 
-document.addEventListener(
-  'webviewerloaded',
-  () => {
-    applyViewerOptions(window.PDFViewerApplicationOptions, config);
-  },
-  { once: true },
-);
+// PDF.js dispatches on the parent document when same-origin access is allowed.
+let viewerEventDocument: Document;
+try {
+  viewerEventDocument = window.parent.document;
+} catch {
+  viewerEventDocument = document;
+}
+const onViewerLoaded = (event: Event): void => {
+  if ((event as CustomEvent<{ source?: Window }>).detail?.source !== window) {
+    return;
+  }
+  viewerEventDocument.removeEventListener('webviewerloaded', onViewerLoaded);
+  applyViewerOptions(window.PDFViewerApplicationOptions, config);
+};
+viewerEventDocument.addEventListener('webviewerloaded', onViewerLoaded);
 
 window.addEventListener(
   'load',
   async () => {
-    const app = window.PDFViewerApplication;
+    try {
+      const app = window.PDFViewerApplication;
 
-    await app.initializedPromise;
-    applyFeatureVisibility(config);
-    blockDisallowedActions(app, config);
+      await app.initializedPromise;
+      applyFeatureVisibility(config);
+      blockDisallowedActions(app, config);
+      await initializeWorker(config);
 
-    app.eventBus.on('documentloaded', () => {
-      postHostMessage({
-        type: 'document-loaded',
-        pagesCount: app.pagesCount,
-      });
-    });
-
-    app.eventBus.on('documenterror', (event?: unknown) => {
-      const detail = event as { reason?: string; message?: string } | undefined;
-      postHostMessage({
-        type: 'document-error',
-        message: detail?.reason || detail?.message || 'Unknown PDF.js error',
-      });
-    });
-
-    await openDocument(app, config, createInitialViewerState(config));
-
-    if (app.pdfLinkService) {
-      app.pdfLinkService.externalLinkEnabled = config.features.externalLinks;
-    }
-
-    let pendingOpen = Promise.resolve();
-
-    window.addEventListener('message', (event: MessageEvent) => {
-      if (!isReloadMessage(event.data)) {
-        return;
-      }
-
-      pendingOpen = pendingOpen
-        .catch(() => undefined)
-        .then(async () => {
-          const state = captureViewerState(app, config);
-          if (app.pdfLinkService) {
-            app.pdfLinkService.externalLinkEnabled =
-              config.features.externalLinks;
+      let reportedRenderedPage = false;
+      app.eventBus.on('documentinit', () => {
+        reportedRenderedPage = false;
+        if (config.features.currentView) {
+          // Startup and close() hide this, including when importing another PDF.
+          for (const id of ['viewBookmark', 'viewBookmarkSeparator']) {
+            document.getElementById(id)?.classList.remove('hidden');
           }
-          await openDocument(app, config, state);
+        }
+      });
+      app.eventBus.on('pagerendered', (event?: unknown) => {
+        const detail = event as
+          { pageNumber?: number; error?: unknown } | undefined;
+        if (detail?.error) {
+          postHostMessage({
+            type: 'document-error',
+            message: String(detail.error),
+          });
+          return;
+        }
+        if (!reportedRenderedPage && typeof detail?.pageNumber === 'number') {
+          reportedRenderedPage = true;
+          postHostMessage({
+            type: 'document-loaded',
+            pagesCount: app.pagesCount,
+          });
+        }
+      });
+
+      app.eventBus.on('documenterror', (event?: unknown) => {
+        const detail = event as
+          { reason?: string; message?: string } | undefined;
+        postHostMessage({
+          type: 'document-error',
+          message: detail?.reason || detail?.message || 'Unknown PDF.js error',
         });
-    });
+      });
+
+      let pendingOpen = openDocument(
+        app,
+        config,
+        createInitialViewerState(config),
+      ).catch(reportDocumentError);
+
+      window.addEventListener('message', (event: MessageEvent) => {
+        if (!isReloadMessage(event.data)) {
+          return;
+        }
+
+        pendingOpen = pendingOpen
+          .then(async () => {
+            const state = captureViewerState(app, config);
+            await openDocument(app, config, state);
+          })
+          .catch(reportDocumentError);
+      });
+      await pendingOpen;
+    } catch (error) {
+      reportDocumentError(error);
+    }
   },
   { once: true },
 );
