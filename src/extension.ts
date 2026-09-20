@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import { PdfCustomProvider } from './pdfProvider';
+import { PreviewLoadState } from './pdfPreview';
+import { registerPdfAgentTools } from './agentTools';
 
 export interface PdfPreviewExtensionApi {
+  getPreviewLoadState: (resource: vscode.Uri) => PreviewLoadState | undefined;
   getActivePreviewLoadState: () =>
     | { status: 'loading' }
     | { status: 'loaded'; pagesCount: number }
@@ -35,7 +38,10 @@ export function activate(
     ),
   );
 
+  registerPdfAgentTools(context, provider);
+
   return {
+    getPreviewLoadState: (resource) => provider.getPreviewLoadState(resource),
     getActivePreviewLoadState: () => provider.activePreviewLoadState,
   };
 }

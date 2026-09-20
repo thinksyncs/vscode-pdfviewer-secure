@@ -2,6 +2,8 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import type { PdfPreviewExtensionApi } from '../../extension';
+import type { PdfAgentTool } from '../../agentTools';
 
 type PreviewLoadState =
   | { status: 'loading' }
@@ -81,6 +83,8 @@ function waitForPageCount(pagesCount: number): Promise<PreviewLoadState> {
 
 suite('pdf preview integration', () => {
   let fixtureDir: vscode.Uri;
+  let api: PdfPreviewExtensionApi;
+  let Tool: typeof PdfAgentTool;
 
   suiteSetup(async () => {
     const extensionPath = process.env.PDF_PREVIEW_TEST_EXTENSION_PATH;
@@ -100,7 +104,16 @@ suite('pdf preview integration', () => {
       fs.realpathSync(extensionPath),
       'tests must exercise the selected extension artifact',
     );
-    await extension.activate();
+    api = (await extension.activate()) as PdfPreviewExtensionApi;
+    // Load the implementation from the selected source or unpacked VSIX.
+    const module = (await import(
+      path.join(extensionPath, 'out/src/agentTools.js')
+    )) as { PdfAgentTool: typeof PdfAgentTool };
+    Tool = module.PdfAgentTool;
+    assert.strictEqual(
+      vscode.workspace.getConfiguration('pdf-preview').get('agent.enabled'),
+      false,
+    );
   });
 
   setup(() => {
@@ -115,9 +128,162 @@ suite('pdf preview integration', () => {
   });
 
   teardown(async () => {
+    await vscode.workspace
+      .getConfiguration('pdf-preview')
+      .update('agent.enabled', undefined, vscode.ConfigurationTarget.Global);
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
     if (fixtureDir) {
       await vscode.workspace.fs.delete(fixtureDir, { recursive: true });
+    }
+  });
+
+  async function enableAgent(): Promise<void> {
+    await vscode.workspace
+      .getConfiguration('pdf-preview')
+      .update('agent.enabled', true, vscode.ConfigurationTarget.Global);
+  }
+
+  function decodeResult(
+    result: vscode.LanguageModelToolResult,
+  ): Record<string, unknown> {
+    assert.strictEqual(result.content.length, 1);
+    const part = result.content[0];
+    assert.ok(part instanceof vscode.LanguageModelTextPart);
+    return JSON.parse(part.value) as Record<string, unknown>;
+  }
+
+  test('registers both agent tools when enabled', async () => {
+    await enableAgent();
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const names = vscode.lm.tools.map((tool) => tool.name);
+      if (
+        names.includes('pdf_preview_open') &&
+        names.includes('pdf_preview_status')
+      ) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.fail('PDF agent tools were not registered');
+  });
+
+  test('rejects direct tool calls while disabled and after cancellation', async () => {
+    const file = vscode.Uri.joinPath(fixtureDir, 'denied.pdf');
+    await vscode.workspace.fs.writeFile(file, buildMinimalPdf());
+    const options = {
+      input: { path: file.fsPath },
+      toolInvocationToken: undefined,
+    };
+    const token = new vscode.CancellationTokenSource();
+    try {
+      const tool = new Tool(api.getPreviewLoadState, true);
+      await assert.rejects(tool.invoke(options, token.token), /User Settings/);
+      await enableAgent();
+      token.cancel();
+      await assert.rejects(tool.invoke(options, token.token), /Canceled/);
+      assert.strictEqual(api.getPreviewLoadState(file), undefined);
+    } finally {
+      token.dispose();
+    }
+  });
+
+  test('opens a PDF through the agent tool and reports only metadata', async () => {
+    await enableAgent();
+    const file = vscode.Uri.joinPath(fixtureDir, 'agent.pdf');
+    await vscode.workspace.fs.writeFile(file, buildMinimalPdf(2));
+    const options = {
+      input: { path: file.fsPath },
+      toolInvocationToken: undefined,
+    };
+    const token = new vscode.CancellationTokenSource();
+    try {
+      const tool = new Tool(api.getPreviewLoadState, true);
+      const preparation = await tool.prepareInvocation(options, token.token);
+      assert.ok(preparation.confirmationMessages);
+      const message = preparation.confirmationMessages.message;
+      assert.ok(message instanceof vscode.MarkdownString);
+      assert.ok(message.value.includes('agent.pdf'));
+      assert.ok(!message.isTrusted);
+      const result = decodeResult(await tool.invoke(options, token.token));
+      assert.deepStrictEqual(result, {
+        path: fs.realpathSync(file.fsPath),
+        status: 'loaded',
+        pagesCount: 2,
+      });
+    } finally {
+      token.dispose();
+    }
+  });
+
+  test('gets status for the requested PDF even when another editor is active', async () => {
+    await enableAgent();
+    const first = await openPdf('first.pdf', buildMinimalPdf());
+    await waitForPageCount(1);
+    await openPdf('second.pdf', buildMinimalPdf(3));
+    await waitForPageCount(3);
+    const tool = new Tool(api.getPreviewLoadState, false);
+    const token = new vscode.CancellationTokenSource();
+    const options = {
+      input: { path: first.fsPath },
+      toolInvocationToken: undefined,
+    };
+    try {
+      assert.deepStrictEqual(
+        decodeResult(await tool.invoke(options, token.token)),
+        {
+          path: fs.realpathSync(first.fsPath),
+          status: 'loaded',
+          pagesCount: 1,
+        },
+      );
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      assert.deepStrictEqual(
+        decodeResult(await tool.invoke(options, token.token)),
+        { path: fs.realpathSync(first.fsPath), status: 'not_open' },
+      );
+    } finally {
+      token.dispose();
+    }
+  });
+
+  test('rejects paths outside the workspace without opening an editor', async () => {
+    await enableAgent();
+    const token = new vscode.CancellationTokenSource();
+    try {
+      const tool = new Tool(api.getPreviewLoadState, true);
+      const outside = path.resolve(fixtureDir.fsPath, '../../outside.pdf');
+      await assert.rejects(
+        tool.invoke(
+          { input: { path: outside }, toolInvocationToken: undefined },
+          token.token,
+        ),
+        /inside an open local workspace/,
+      );
+      assert.strictEqual(api.getActivePreviewLoadState(), undefined);
+    } finally {
+      token.dispose();
+    }
+  });
+
+  test('returns an error status without forwarding PDF error text', async () => {
+    await enableAgent();
+    const file = vscode.Uri.joinPath(fixtureDir, 'agent-malformed.pdf');
+    await vscode.workspace.fs.writeFile(file, Buffer.from('not a PDF'));
+    const token = new vscode.CancellationTokenSource();
+    try {
+      const tool = new Tool(api.getPreviewLoadState, true);
+      assert.deepStrictEqual(
+        decodeResult(
+          await tool.invoke(
+            { input: { path: file.fsPath }, toolInvocationToken: undefined },
+            token.token,
+          ),
+        ),
+        { path: fs.realpathSync(file.fsPath), status: 'error' },
+      );
+    } finally {
+      token.dispose();
     }
   });
 

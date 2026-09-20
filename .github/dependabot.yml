@@ -7,6 +7,10 @@ updates:
       time: '04:00'
       timezone: Asia/Tokyo
     open-pull-requests-limit: 10
+    # Update API types together with engines.vscode; vsce rejects newer types.
+    ignore:
+      - dependency-name: '@types/vscode'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
     commit-message:
       prefix: deps
       include: scope

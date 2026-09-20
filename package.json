@@ -2,7 +2,7 @@
   "name": "vscode-pdfviewer-secure",
   "displayName": "PDF Viewer Secure",
   "description": "Open and preview PDF files in VS Code with security-first, offline-first defaults.",
-  "version": "2.2.0",
+  "version": "2.4.0",
   "publisher": "ToppyMicroServices",
   "engines": {
     "vscode": "^1.111.0"
@@ -29,7 +29,9 @@
   },
   "homepage": "https://www.toppymicros.com/products/vscode-pdfviewer-secure",
   "activationEvents": [
-    "onCustomEditor:vscode-pdfviewer.preview"
+    "onCustomEditor:vscode-pdfviewer.preview",
+    "onLanguageModelTool:pdf_preview_open",
+    "onLanguageModelTool:pdf_preview_status"
   ],
   "main": "./out/src/extension",
   "contributes": {
@@ -127,9 +129,63 @@
           "markdownDescription": "Allow PDF annotation editing controls such as highlight, ink, text, stamp, and signature tools.",
           "type": "boolean",
           "default": false
+        },
+        "pdf-preview.agent.enabled": {
+          "markdownDescription": "Enable PDF preview tools for agents such as Copilot in trusted local workspaces. Tools return the file path, loading status, and page count, without extracting PDF text.",
+          "type": "boolean",
+          "default": false,
+          "scope": "application"
         }
       }
-    }
+    },
+    "languageModelTools": [
+      {
+        "name": "pdf_preview_open",
+        "toolReferenceName": "pdfPreviewOpen",
+        "displayName": "Open PDF Preview",
+        "userDescription": "Open a PDF in the PDF Viewer Secure editor and wait up to 30 seconds for its first page to render.",
+        "modelDescription": "Open a PDF in the PDF Viewer Secure editor and wait up to 30 seconds for its first page to render. Requires pdf-preview.agent.enabled in User Settings and an existing .pdf file inside an open trusted local workspace. Accepts an absolute filesystem path, not a URL. Returns JSON with the canonical path and status (not_open, loading, loaded, or error); loaded includes pagesCount. Does not extract PDF text, images, annotations, or OCR. Do not use this tool to summarize PDF contents. A loading result may be checked later with pdf_preview_status.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(file-pdf)",
+        "when": "config.pdf-preview.agent.enabled && isWorkspaceTrusted",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Absolute local filesystem path to an existing .pdf file inside an open workspace folder."
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "pdf_preview_status",
+        "toolReferenceName": "pdfPreviewStatus",
+        "displayName": "Get PDF Preview Status",
+        "userDescription": "Get the current state of a PDF already open in PDF Viewer Secure without opening it or changing editor focus.",
+        "modelDescription": "Get the current state of a PDF already open in PDF Viewer Secure without opening it or changing editor focus. Requires pdf-preview.agent.enabled in User Settings and an existing .pdf file inside an open trusted local workspace. Accepts an absolute filesystem path, not a URL. Returns JSON with the canonical path and status (not_open, loading, loaded, or error); loaded includes pagesCount. Does not extract PDF text, images, annotations, or OCR. Do not use this tool to summarize PDF contents. A loading result may be checked later with pdf_preview_status.",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(file-pdf)",
+        "when": "config.pdf-preview.agent.enabled && isWorkspaceTrusted",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Absolute local filesystem path to an existing .pdf file inside an open workspace folder."
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -149,7 +205,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.13.10",
-    "@types/vscode": "1.137.0",
+    "@types/vscode": "1.110.0",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
     "@vscode/test-electron": "^2.5.2",

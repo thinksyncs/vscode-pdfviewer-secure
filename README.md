@@ -1,29 +1,27 @@
 # PDF Viewer Secure
 
-Open and preview PDF files in VS Code with security-first, offline-first defaults.
+View PDFs offline in VS Code with bundled PDF.js and restrictive defaults. Requires VS Code 1.111 or later.
+
+[Install from Marketplace](https://marketplace.visualstudio.com/items?itemName=ToppyMicroServices.vscode-pdfviewer-secure), then open a `.pdf` file.
 
 ![PDF preview](./assets/Screenshot_readme.png)
 
-- View PDF files without leaving VS Code
-- Read-only by default
-- External links, forms, printing, downloads, and annotation editing stay off unless you enable them
-- Built for security-first, offline-first use in business environments
+## Defaults and settings
 
-Requires VS Code 1.111 or later. PDF scripting stays disabled, including when forms are enabled. Download controls also apply to embedded attachments.
+- External links, file imports, downloads (including attachments), printing, forms, and annotation editing are off by default.
+- Enable optional features with `pdf-preview.features.*` in VS Code settings.
+- Adjust zoom, cursor, sidebar, and page layout with `pdf-preview.default.*`.
+- PDF JavaScript stays disabled, even when forms are enabled.
 
-## Release Channels
+## Copilot Agent tools
 
-- Stable releases publish from `vX.Y.Z` tags to the normal Marketplace channel.
-- Daily releases build and publish to the Marketplace pre-release channel every day.
-- Stable versioning follows normal semver, for example `1.2.3 -> 1.2.4`.
-- Daily versioning uses the next minor line with the GitHub run number, for example `1.2.3 -> 1.3.<run_number>`.
+Enable `pdf-preview.agent.enabled` in **User Settings**, then select the tools in Copilot Agent chat:
 
-## Disclaimer
+- `#pdfPreviewOpen`: open a workspace PDF and report its loading status and page count.
+- `#pdfPreviewStatus`: check a PDF preview by its absolute file path.
 
-This extension is provided `as is`, without warranty.
-Please review it in your own environment before business or production use.
+Tools require a trusted local workspace and reject paths outside it, including symlink escapes. They return the path, status, and page count to the chat; they do not extract PDF text or provide OCR. These are VS Code tools, not a standalone MCP server or Agent Plugin.
 
 ## Attribution
 
-This project is based on `tomoki1207/vscode-pdfviewer` and uses Mozilla PDF.js.
-Original license notices and attribution are preserved in this repository.
+Based on [tomoki1207/vscode-pdfviewer](https://github.com/tomoki1207/vscode-pdfviewer) and [Mozilla PDF.js](https://github.com/mozilla/pdf.js). Original notices are preserved. Provided as is, without warranty; see [LICENSE](./LICENSE).

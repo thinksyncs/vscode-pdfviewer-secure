@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.0 (2026-09-20)
+
+- Add opt-in Copilot Agent tools to open workspace PDFs and report preview status and page count.
+- Restrict agent tools to trusted local workspaces and reject paths or symlinks that escape workspace folders.
+- Keep PDF contents out of tool responses and preserve existing viewer defaults without new runtime dependencies.
+- Simplify the README and document agent setup.
+- Keep VS Code API types compatible with the minimum supported editor version.
+
 ## 2.2.0 (2026-09-17)
 
 - Fix viewer startup, receive PDF.js initialization events, and load the bundled worker through a Blob URL.

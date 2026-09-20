@@ -15,7 +15,7 @@ import { Disposable } from './disposable';
 import { createViewerHtml } from './viewerTemplate';
 
 type PreviewState = 'Disposed' | 'Visible' | 'Active';
-type PreviewLoadState =
+export type PreviewLoadState =
   | { status: 'loading' }
   | { status: 'loaded'; pagesCount: number }
   | { status: 'error'; message: string };
