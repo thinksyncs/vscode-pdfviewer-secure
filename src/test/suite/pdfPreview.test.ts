@@ -100,8 +100,8 @@ suite('pdf preview integration', () => {
       'the requested development extension must be installed',
     );
     assert.strictEqual(
-      fs.realpathSync(extension.extensionPath),
-      fs.realpathSync(extensionPath),
+      fs.realpathSync.native(extension.extensionPath),
+      fs.realpathSync.native(extensionPath),
       'tests must exercise the selected extension artifact',
     );
     api = (await extension.activate()) as PdfPreviewExtensionApi;
@@ -207,7 +207,7 @@ suite('pdf preview integration', () => {
       assert.ok(!message.isTrusted);
       const result = decodeResult(await tool.invoke(options, token.token));
       assert.deepStrictEqual(result, {
-        path: fs.realpathSync(file.fsPath),
+        path: fs.realpathSync.native(file.fsPath),
         status: 'loaded',
         pagesCount: 2,
       });
@@ -232,7 +232,7 @@ suite('pdf preview integration', () => {
       assert.deepStrictEqual(
         decodeResult(await tool.invoke(options, token.token)),
         {
-          path: fs.realpathSync(first.fsPath),
+          path: fs.realpathSync.native(first.fsPath),
           status: 'loaded',
           pagesCount: 1,
         },
@@ -240,7 +240,7 @@ suite('pdf preview integration', () => {
       await vscode.commands.executeCommand('workbench.action.closeAllEditors');
       assert.deepStrictEqual(
         decodeResult(await tool.invoke(options, token.token)),
-        { path: fs.realpathSync(first.fsPath), status: 'not_open' },
+        { path: fs.realpathSync.native(first.fsPath), status: 'not_open' },
       );
     } finally {
       token.dispose();
@@ -280,7 +280,7 @@ suite('pdf preview integration', () => {
             token.token,
           ),
         ),
-        { path: fs.realpathSync(file.fsPath), status: 'error' },
+        { path: fs.realpathSync.native(file.fsPath), status: 'error' },
       );
     } finally {
       token.dispose();

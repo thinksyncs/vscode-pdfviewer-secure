@@ -33,7 +33,7 @@ suite('agent access', () => {
         path.join(root, 'missing'),
         workspace,
       ]),
-      fs.realpathSync(pdf),
+      fs.realpathSync.native(pdf),
     );
   });
 
@@ -112,11 +112,11 @@ suite('agent access', () => {
       await resolveWorkspacePdfPath(path.join(rootLink, 'example.PDF'), [
         rootLink,
       ]),
-      fs.realpathSync(pdf),
+      fs.realpathSync.native(pdf),
     );
     assert.strictEqual(
-      await resolveWorkspacePdfPath(fs.realpathSync(pdf), [rootLink]),
-      fs.realpathSync(pdf),
+      await resolveWorkspacePdfPath(fs.realpathSync.native(pdf), [rootLink]),
+      fs.realpathSync.native(pdf),
     );
     const inner = path.join(workspace, 'inner');
     fs.mkdirSync(inner);
@@ -128,7 +128,7 @@ suite('agent access', () => {
       await resolveWorkspacePdfPath(path.join(innerLink, 'inner.pdf'), [
         workspace,
       ]),
-      fs.realpathSync(innerPdf),
+      fs.realpathSync.native(innerPdf),
     );
   });
 });
