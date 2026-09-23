@@ -1,7 +1,9 @@
 import * as path from 'path';
 import * as Mocha from 'mocha';
+import { verifyOfflineEnvironment } from '../offlineEnvironment';
 
-export function run(): Promise<void> {
+export async function run(): Promise<void> {
+  await verifyOfflineEnvironment();
   const mocha = new Mocha({
     ui: 'tdd',
     timeout: 40000,
@@ -15,7 +17,7 @@ export function run(): Promise<void> {
         if (failures > 0) {
           reject(new Error(`${failures} tests failed.`));
         } else {
-          resolve();
+          verifyOfflineEnvironment().then(resolve, reject);
         }
       });
       runner.on('fail', (test, error) => {

@@ -189,8 +189,8 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
-      - name: Run integration tests
-        run: xvfb-run -a npm run test:integration
+      - name: Run integration tests without external networking
+        run: npm run test:offline
 
       - name: Set daily build version
         run: npm version "${{ steps.version.outputs.daily_version }}" --no-git-tag-version
@@ -198,13 +198,13 @@ jobs:
       - name: Package daily pre-release VSIX
         run: npx vsce package --pre-release --out "${{ steps.version.outputs.vsix_name }}"
 
-      - name: Test packaged VSIX
+      - name: Test packaged VSIX without external networking
         env:
           VSIX_NAME: ${{ steps.version.outputs.vsix_name }}
         run: |
           PACKAGED_EXTENSION_ROOT="$(mktemp -d "$RUNNER_TEMP/pdfviewer-vsix.XXXXXX")"
           python3 -m zipfile -e "$VSIX_NAME" "$PACKAGED_EXTENSION_ROOT"
-          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" xvfb-run -a npm run test:integration
+          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" npm run test:offline
 
       - name: Build daily release notes
         run: |

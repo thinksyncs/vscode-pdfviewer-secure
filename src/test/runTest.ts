@@ -68,6 +68,11 @@ async function main(): Promise<void> {
       }),
     );
     const vscodeExecutablePath = resolveLocalVSCodeExecutablePath();
+    if (process.env.PDF_PREVIEW_OFFLINE === '1' && !vscodeExecutablePath) {
+      throw new Error(
+        'Offline tests require an already downloaded VS Code executable.',
+      );
+    }
     console.log(`Testing extension: ${extensionDevelopmentPath}`);
     console.log(`Isolated test profile: ${testDataRoot}`);
 
@@ -78,6 +83,8 @@ async function main(): Promise<void> {
       version: process.env.VSCODE_VERSION,
       extensionTestsEnv: {
         PDF_PREVIEW_TEST_EXTENSION_PATH: extensionDevelopmentPath,
+        PDF_PREVIEW_OFFLINE: process.env.PDF_PREVIEW_OFFLINE,
+        PDF_PREVIEW_HOST_NETNS: process.env.PDF_PREVIEW_HOST_NETNS,
       },
       launchArgs: [
         workspaceDir,

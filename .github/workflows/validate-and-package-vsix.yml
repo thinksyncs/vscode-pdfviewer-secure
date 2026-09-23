@@ -8,11 +8,53 @@ on:
       - 'v*.*.*'
   pull_request:
   workflow_dispatch:
+    inputs:
+      published_version:
+        description: Optional Marketplace version to test offline (for example 2.4.0)
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
 
 jobs:
+  published-offline:
+    name: Published VSIX Offline (VS Code ${{ matrix.vscode }})
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        vscode: ['1.111.0', stable]
+    env:
+      VSCODE_VERSION: ${{ matrix.vscode }}
+      PUBLISHED_VERSION: ${{ inputs.published_version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install test dependencies
+        run: npm ci
+      - name: Download and check the public VSIX
+        run: |
+          if [[ ! "$PUBLISHED_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo 'Expected a numeric Marketplace version.'
+            exit 1
+          fi
+          PUBLIC_VSIX="$RUNNER_TEMP/marketplace.vsix"
+          curl --fail --location --compressed --retry 3 --max-time 120 \
+            "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ToppyMicroServices/vsextensions/vscode-pdfviewer-secure/$PUBLISHED_VERSION/vspackage" \
+            -o "$PUBLIC_VSIX"
+          PUBLIC_ROOT="$(mktemp -d "$RUNNER_TEMP/pdfviewer-public.XXXXXX")"
+          python3 scripts/check-public-vsix.py "$PUBLIC_VSIX" "$PUBLIC_ROOT" "$PUBLISHED_VERSION"
+          echo "VSCODE_EXTENSION_DEVELOPMENT_PATH=$PUBLIC_ROOT/extension" >> "$GITHUB_ENV"
+      - name: Test the published VSIX without external networking
+        run: npm run test:offline
+
   validate:
     name: Validate (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -73,8 +115,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run integration tests
-        run: xvfb-run -a npm run test:integration
+      - name: Run integration tests without external networking
+        run: npm run test:offline
 
   package:
     name: Package VSIX (ubuntu-latest)
@@ -105,17 +147,17 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Run integration tests
-        run: xvfb-run -a npm run test:integration
+      - name: Run integration tests without external networking
+        run: npm run test:offline
 
       - name: Package VSIX
         run: npm run package -- --out "$VSIX_NAME"
 
-      - name: Test packaged VSIX
+      - name: Test packaged VSIX without external networking
         run: |
           PACKAGED_EXTENSION_ROOT="$(mktemp -d "$RUNNER_TEMP/pdfviewer-vsix.XXXXXX")"
           python3 -m zipfile -e "$VSIX_NAME" "$PACKAGED_EXTENSION_ROOT"
-          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" xvfb-run -a npm run test:integration
+          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" npm run test:offline
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v7

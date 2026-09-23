@@ -195,6 +195,8 @@
     "test:unit": "mocha --ui tdd \"out/src/test/suite/*.test.js\" --ignore \"out/src/test/suite/pdfPreview.test.js\"",
     "pretest:integration": "npm run compile",
     "test:integration": "node ./out/src/test/runTest.js",
+    "pretest:offline": "npm run compile",
+    "test:offline": "node ./out/src/test/runOfflineTest.js",
     "test": "npm run test:unit",
     "lint": "eslint ./src --ext .ts",
     "package": "vsce package"

@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
+import { deflateSync } from 'zlib';
 import * as vscode from 'vscode';
 import type { PdfPreviewExtensionApi } from '../../extension';
 import type { PdfAgentTool } from '../../agentTools';
@@ -50,6 +51,67 @@ function buildMinimalPdf(pagesCount = 1): Uint8Array {
   const trailer = `trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${startXRef}\n%%EOF\n`;
 
   return Uint8Array.from(Buffer.from(body + xref + trailer, 'ascii'));
+}
+
+function buildResourcePdf(cjk: boolean): Uint8Array {
+  const content = cjk
+    ? 'BT /F1 24 Tf 20 70 Td <65E5672C8A9E> Tj ET'
+    : 'BT /F1 24 Tf 20 70 Td (Offline image) Tj ET q 20 0 0 20 20 20 cm /Im1 Do Q';
+  const image = deflateSync(
+    Buffer.from([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]),
+  );
+  const objects = [
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
+    Buffer.from(
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Resources << /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 5 0 R >>',
+    ),
+    Buffer.from(
+      cjk
+        ? '<< /Type /Font /Subtype /Type0 /BaseFont /HeiseiMin-W3 /Encoding /UniJIS-UTF16-H /DescendantFonts [7 0 R] >>'
+        : '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    ),
+    Buffer.from(
+      `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+    ),
+    Buffer.concat([
+      Buffer.from(
+        `<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>\nstream\n`,
+      ),
+      image,
+      Buffer.from('\nendstream'),
+    ]),
+    Buffer.from(
+      '<< /Type /Font /Subtype /CIDFontType0 /BaseFont /HeiseiMin-W3 /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >> /FontDescriptor 8 0 R /DW 1000 >>',
+    ),
+    Buffer.from(
+      '<< /Type /FontDescriptor /FontName /HeiseiMin-W3 /Flags 6 /FontBBox [-123 -257 1001 910] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >>',
+    ),
+  ];
+  const chunks = [Buffer.from('%PDF-1.4\n')];
+  const offsets = [0];
+  let size = chunks[0].length;
+  for (const [index, object] of objects.entries()) {
+    offsets.push(size);
+    const chunk = Buffer.concat([
+      Buffer.from(`${index + 1} 0 obj\n`),
+      object,
+      Buffer.from('\nendobj\n'),
+    ]);
+    chunks.push(chunk);
+    size += chunk.length;
+  }
+  chunks.push(
+    Buffer.from(
+      `xref\n0 ${offsets.length}\n0000000000 65535 f \n${offsets
+        .slice(1)
+        .map((offset) => `${offset.toString().padStart(10, '0')} 00000 n \n`)
+        .join(
+          '',
+        )}trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${size}\n%%EOF\n`,
+    ),
+  );
+  return Buffer.concat(chunks);
 }
 
 async function waitForPreviewState(
@@ -114,6 +176,24 @@ suite('pdf preview integration', () => {
       vscode.workspace.getConfiguration('pdf-preview').get('agent.enabled'),
       false,
     );
+    for (const feature of [
+      'externalLinks',
+      'openFile',
+      'download',
+      'print',
+      'documentProperties',
+      'currentView',
+      'forms',
+      'annotationEditing',
+    ]) {
+      assert.strictEqual(
+        vscode.workspace
+          .getConfiguration('pdf-preview')
+          .get(`features.${feature}`),
+        false,
+        `${feature} must be disabled in a fresh profile`,
+      );
+    }
   });
 
   setup(() => {
@@ -308,6 +388,16 @@ suite('pdf preview integration', () => {
 
   test('renders a single-page PDF in the custom editor', async () => {
     await openPdf('minimal.pdf', buildMinimalPdf());
+    await waitForPageCount(1);
+  });
+
+  test('renders a PDF containing a compressed image', async () => {
+    await openPdf('offline-image.pdf', buildResourcePdf(false));
+    await waitForPageCount(1);
+  });
+
+  test('renders a PDF using the bundled Japanese character map', async () => {
+    await openPdf('日本語.pdf', buildResourcePdf(true));
     await waitForPageCount(1);
   });
 

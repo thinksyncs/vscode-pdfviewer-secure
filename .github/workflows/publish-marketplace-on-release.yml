@@ -61,8 +61,8 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
-      - name: Run integration tests
-        run: xvfb-run -a npm run test:integration
+      - name: Run integration tests without external networking
+        run: npm run test:offline
 
       - name: Check publish secret
         env:
@@ -73,11 +73,11 @@ jobs:
       - name: Package VSIX
         run: npx vsce package --out "$VSIX_NAME"
 
-      - name: Test packaged VSIX
+      - name: Test packaged VSIX without external networking
         run: |
           PACKAGED_EXTENSION_ROOT="$(mktemp -d "$RUNNER_TEMP/pdfviewer-vsix.XXXXXX")"
           python3 -m zipfile -e "$VSIX_NAME" "$PACKAGED_EXTENSION_ROOT"
-          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" xvfb-run -a npm run test:integration
+          env VSCODE_EXTENSION_DEVELOPMENT_PATH="$PACKAGED_EXTENSION_ROOT/extension" npm run test:offline
 
       - name: Publish release build to VS Code Marketplace
         env:

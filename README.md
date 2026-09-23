@@ -6,6 +6,8 @@ View PDFs offline in VS Code with bundled PDF.js and restrictive defaults. Requi
 
 ![PDF preview](./assets/Screenshot_readme.png)
 
+After installation, local PDF viewing uses bundled assets and needs no internet connection, including on first launch. CI tests rendering and reloads with external networking disabled; see [offline verification](./docs/offline-testing.md). Copilot model requests, installation downloads, and remote files are outside this offline support.
+
 ## Defaults and settings
 
 - External links, file imports, downloads (including attachments), printing, forms, and annotation editing are off by default.
